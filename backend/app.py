@@ -112,3 +112,23 @@ def debug():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
+
+@app.route('/api/files')
+def files():
+    """Show actual S3 files available for latest cycle member 1."""
+    from downloader import s3_list, get_latest_cycle
+    try:
+        date_str, hour_str, base_path = get_latest_cycle()
+        prefix = f"{base_path}m001/"
+        keys = s3_list(prefix, max_keys=200)
+        filenames = sorted([k.split('/')[-1] for k in keys if k.endswith('.grib2') and not k.endswith('.idx')])
+        return jsonify({
+            'cycle': f"{date_str} {hour_str}Z",
+            'base_path': base_path,
+            'prefix': prefix,
+            'file_count': len(filenames),
+            'files': filenames
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
