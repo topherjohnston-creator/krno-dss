@@ -1,13 +1,13 @@
 """
 downloader.py
 Fetches REFS GRIB2 data from AWS S3 using byte-range requests.
-File naming convention confirmed from S3 inventory:
-  rrfs.t{HH}z.{member}.2dfld.3km.f{FXX}.conus.grib2
+File naming convention: rrfs.t{HH}z.{member}.2dfld.3km.f{FXX}.conus.grib2
 """
 
 import requests
 import tempfile
 import os
+import re
 import logging
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
@@ -51,7 +51,6 @@ def get_latest_cycle():
     Returns (date_str, hour_str, base_path)
     """
     now = datetime.now(timezone.utc)
-
     for hours_back in range(0, 49, 6):
         t = now - timedelta(hours=hours_back)
         cycle_hour = (t.hour // 6) * 6
@@ -59,31 +58,30 @@ def get_latest_cycle():
         date_str = t_cycle.strftime('%Y%m%d')
         hour_str = f"{cycle_hour:02d}"
 
-        prefixes = [
+        for prefix in [
             f"rrfs_a/rrfsens.{date_str}/{hour_str}/m001/",
             f"rrfs_a/refs.{date_str}/{hour_str}/m001/",
             f"rrfs_public/refs.{date_str}/{hour_str}/m001/",
-        ]
-
-        for prefix in prefixes:
+        ]:
             keys = s3_list(prefix, max_keys=5)
             if keys:
                 base = prefix.split('m001/')[0]
                 log.info(f"Found REFS cycle at: {prefix}")
                 return date_str, hour_str, base
 
-    raise RuntimeError(
-        f"No REFS data found on AWS S3 in the past 48 hours from "
-        f"{now.strftime('%Y-%m-%d %H:%M UTC')}."
-    )
+    raise RuntimeError("No REFS data found on AWS S3 in the past 48 hours.")
 
 
-def build_file_url(base_path, member, hour_str, fxx):
-    """
-    Build the exact GRIB2 and IDX URLs for a member/forecast hour.
-    Confirmed naming pattern: rrfs.t{HH}z.{member}.2dfld.3km.f{FXX}.conus.grib2
-    """
-    fxx_str = f"{fxx:03d}"
+def extract_hour_str(base_path):
+    """Extract cycle hour from base path, e.g. 'rrfs_a/rrfsens.20260508/06/' -> '06'"""
+    match = re.search(r'/(\d{2})/$', base_path)
+    return match.group(1) if match else '00'
+
+
+def build_file_url(base_path, member, fxx):
+    """Build GRIB2 and IDX URLs. Derives cycle hour from base_path."""
+    hour_str = extract_hour_str(base_path)
+    fxx_str  = f"{fxx:03d}"
     filename = f"rrfs.t{hour_str}z.{member}.2dfld.3km.f{fxx_str}.conus.grib2"
     grib_url = f"{S3_BASE}/{base_path}{member}/{filename}"
     idx_url  = f"{S3_BASE}/{base_path}{member}/{filename}.idx"
@@ -107,12 +105,8 @@ def fetch_idx(idx_url):
                 varname    = parts[3]
                 level      = parts[4]
                 end_offset = int(lines[i+1].split(':')[1]) - 1 if i+1 < len(lines) else None
-                entries.append({
-                    'varname':    varname,
-                    'level':      level,
-                    'offset':     offset,
-                    'end_offset': end_offset
-                })
+                entries.append({'varname': varname, 'level': level,
+                                'offset': offset, 'end_offset': end_offset})
             except (ValueError, IndexError):
                 continue
         return entries
@@ -130,16 +124,16 @@ def fetch_grib2_variable(grib_url, offset, end_offset):
     return r.content
 
 
-def download_surface_vars_for_hour(base_path, member, hour_str, fxx):
+def download_surface_vars_for_hour(base_path, member, fxx):
     """
-    Download only the surface variables we need for one member/hour.
+    Download surface variables for one member/hour.
     Returns path to temp GRIB2 file, or None if unavailable.
     """
-    grib_url, idx_url = build_file_url(base_path, member, hour_str, fxx)
+    grib_url, idx_url = build_file_url(base_path, member, fxx)
 
     idx_entries = fetch_idx(idx_url)
     if not idx_entries:
-        log.debug(f"No IDX for {member} f{fxx:03d}: {idx_url}")
+        log.debug(f"No IDX for {member} f{fxx:03d}")
         return None
 
     chunks = []
@@ -161,6 +155,5 @@ def download_surface_vars_for_hour(base_path, member, hour_str, fxx):
     for chunk in chunks:
         tmp.write(chunk)
     tmp.close()
-
     log.info(f"Got {len(chunks)}/{len(SURFACE_VARS)} vars: {member} f{fxx:03d}")
     return tmp.name
