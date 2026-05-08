@@ -1,15 +1,17 @@
-FROM python:3.11-slim
-
-# Install ecCodes C library — package name is libeccodes3 on Debian Trixie
-RUN apt-get update && apt-get install -y \
-    libeccodes3 \
-    libeccodes-dev \
-    && rm -rf /var/lib/apt/lists/*
+FROM continuumio/miniconda3:latest
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
+# Install all dependencies via conda-forge — ecCodes is perfectly packaged here
+RUN conda install -c conda-forge -y \
+    eccodes \
+    cfgrib \
+    flask \
+    flask-cors \
+    requests \
+    numpy \
+    gunicorn \
+    && conda clean -afy
 
 COPY . .
 
