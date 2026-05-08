@@ -1,0 +1,8 @@
+flask==3.0.3
+flask-cors==4.0.1
+requests==2.32.3
+cfgrib==0.9.14.0
+eccodes==1.7.1
+numpy==1.26.4
+scipy==1.13.1
+gunicorn==22.0.0
