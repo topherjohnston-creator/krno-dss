@@ -26,31 +26,25 @@ REFRESH_INTERVAL = 3600
 
 def do_refresh():
     """Single refresh attempt with granular logging."""
-    debug = []
+    live_log = ["Starting refresh..."]
+    cache['debug'] = live_log
     try:
-        debug.append("Step 1: importing processor...")
-        cache['debug'] = debug[:]
         from processor import get_refs_probabilities
-
-        debug.append("Step 2: calling get_refs_probabilities()...")
-        cache['debug'] = debug[:]
-
-        result = get_refs_probabilities()
-
+        live_log.append("Processor imported OK")
+        result = get_refs_probabilities(live_log=live_log)
         cache['threats']      = result['threats']
         cache['timeline']     = result['timeline']
         cache['cycle']        = result['cycle']
-        cache['debug']        = result.get('debug', [])
+        cache['debug']        = live_log
         cache['last_updated'] = datetime.now(timezone.utc).isoformat()
         cache['error']        = None
         log.info(f"Refresh complete: {result['cycle']}")
-
     except Exception as e:
         import traceback
         err = f"{type(e).__name__}: {e}"
         tb  = traceback.format_exc()
         cache['error'] = err
-        cache['debug'] = debug + [f"ERROR: {err}", f"TRACEBACK: {tb}"]
+        cache['debug'] = live_log + [f"ERROR: {err}", f"TRACEBACK: {tb}"]
         log.error(f"Refresh failed: {err}\n{tb}")
 
 
