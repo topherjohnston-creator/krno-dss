@@ -1,9 +1,11 @@
-FROM continuumio/miniconda3:latest
+FROM mambaorg/micromamba:1.5-jammy
 
+USER root
 WORKDIR /app
 
-# Install all dependencies via conda-forge — ecCodes is perfectly packaged here
-RUN conda install -c conda-forge -y \
+# Install Python + ecCodes + all dependencies via conda-forge
+RUN micromamba install -y -n base -c conda-forge \
+    python=3.11 \
     eccodes \
     cfgrib \
     flask \
@@ -11,8 +13,11 @@ RUN conda install -c conda-forge -y \
     requests \
     numpy \
     gunicorn \
-    && conda clean -afy
+    && micromamba clean --all --yes
 
 COPY . .
+
+# Make conda environment available
+ENV PATH="/opt/conda/bin:$PATH"
 
 CMD gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
