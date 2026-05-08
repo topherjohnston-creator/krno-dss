@@ -73,7 +73,7 @@ def get_refs_probabilities():
         debug_log.append(f"Processing {member}...")
         success = 0
         for fxx in FORECAST_HOURS:
-            grib_path = download_surface_vars_for_hour(base_path, member, hour_str, fxx)
+            grib_path = download_surface_vars_for_hour(base_path, member, fxx)
             if grib_path is None:
                 continue
             raw = extract_point_values(grib_path)
