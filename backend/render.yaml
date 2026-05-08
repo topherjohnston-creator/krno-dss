@@ -1,11 +1,7 @@
 services:
   - type: web
     name: krno-dss-backend
-    runtime: python
+    runtime: docker
     plan: free
-    buildCommand: apt-get install -y libeccodes-dev && pip install --upgrade pip && pip install --prefer-binary -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.9
+    dockerfilePath: ./Dockerfile
     autoDeploy: true
