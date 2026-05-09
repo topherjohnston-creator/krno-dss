@@ -268,6 +268,9 @@
     </div>
 
     <script>
+        // --- BACKEND URL ---
+        const BACKEND_URL = "https://factsheet-aim-washstand.ngrok-free.dev"; // Update this if ngrok restarts
+
         const TOTAL_HOURS = 48; 
         let globalNow = new Date(); 
         let isAWWActive = true; 
@@ -291,9 +294,9 @@
 
         const RISK_LEVELS = {
             5: { name: "Extreme", color: '#9c27b0', textColor: '#ffffff' }, 
-            4: { name: "Major", color: '#f44336', textColor: '#ffffff' },    
+            4: { name: "Major", color: '#f44336', textColor: '#ffffff' },   
             3: { name: "Moderate", color: '#ff9800', textColor: '#000000' }, 
-            2: { name: "Minor", color: '#ffeb3b', textColor: '#000000' },    
+            2: { name: "Minor", color: '#ffeb3b', textColor: '#000000' },   
             1: { name: "Little to None", color: '#e2f0cb', textColor: '#000000' }, 
             0: { name: "None", color: '#3f3f46', textColor: '#71717a' } 
         };
@@ -301,7 +304,6 @@
         const SHORT_FUSED_WARNINGS = ["Severe Thunderstorm Warning", "Tornado Warning", "Flash Flood Warning", "Flash Flood Emergency", "Flood Advisory", "Snow Squall Warning", "Dust Storm Warning", "Blowing Dust Advisory", "Special Weather Statement", "Airport Weather Warning"];
         const EXTREME_WARNINGS_LIST = [ "blizzard warning", "tornado warning", "severe thunderstorm warning", "ice storm warning", "snow squall warning", "extreme cold warning", "flash flood warning", "airport weather warning" ];
 
-        // Updated Prep/Reasons from Chart
         const HAZARD_DETAILS = [
             { id: 'Wind', icon: "ph-wind", name: "Wind", metric: "58-65 mph", prep: "Debris/high-profile vehicles", winterPriority: 2 },
             { id: 'Lightning', icon: "ph-lightning", name: "Lightning", metric: "<5%", prep: "Ramp/safety closure", winterPriority: 8 },
@@ -317,7 +319,6 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             initDashboard();
-            // Auto-refresh every 5 minutes
             setInterval(() => { initDashboard(); }, 5 * 60 * 1000);
         });
 
@@ -335,20 +336,9 @@
         function showTooltip(html) { if(tooltip) { tooltip.innerHTML = html; tooltip.classList.add('visible'); } }
         function hideTooltip() { if(tooltip) { tooltip.classList.remove('visible'); } }
 
-        function getDynamicTimeStr(baseDate, offsetHrs) {
-            const d = new Date(baseDate.getTime() + offsetHrs * 3600000);
-            let hours = d.getHours();
-            const ampm = hours >= 12 ? 'P' : 'A';
-            hours = hours % 12; hours = hours ? hours : 12;
-            let dayName = "Today";
-            if (d.getDate() !== baseDate.getDate()) dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
-            return `${dayName} ${hours}:00${ampm}`;
-        }
-
-        // TOOLTIP HELPER FOR HOURS (Rounded to HH:00)
         window.showHourTooltip = function(offset) {
             const d = new Date(globalNow.getTime() + offset * 3600000);
-            d.setMinutes(0); d.setSeconds(0); // Snap to nearest whole hour
+            d.setMinutes(0); d.setSeconds(0); 
             const local = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
             const zHour = d.getUTCHours().toString().padStart(2, '0');
             const zMin = d.getUTCMinutes().toString().padStart(2, '0');
@@ -356,19 +346,26 @@
             showTooltip(html);
         };
 
-        function getHazardTimeString(id) {
+        function getHazardTimeString(h_id, refsTimeline) {
+            if (!refsTimeline) return "";
+            
+            const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE', 'Flooding': 'RAIN' };
+            const refKey = hazardMapping[h_id] || h_id.toUpperCase();
+            const tData = refsTimeline[refKey];
+            if(!tData) return "";
+
             let maxRisk = 0;
-            for(let i=0; i<TOTAL_HOURS; i++) {
-                const r = getRiskForVariable(id, i);
-                if(r > maxRisk) maxRisk = r;
+            for(let i=1; i<=TOTAL_HOURS; i++) {
+                if(tData[i] && tData[i].risk > maxRisk) maxRisk = tData[i].risk;
             }
             if(maxRisk < 1) return ""; 
 
             let start = -1, end = -1;
-            for(let i=0; i<TOTAL_HOURS; i++) {
-                const r = getRiskForVariable(id, i);
-                if(r === maxRisk && start === -1) start = i;
-                if(r === maxRisk) end = i;
+            for(let i=1; i<=TOTAL_HOURS; i++) {
+                if(tData[i] && tData[i].risk === maxRisk) {
+                    if(start === -1) start = i - 1;
+                    end = i - 1;
+                }
             }
             
             const d1 = new Date(globalNow.getTime() + start*3600000);
@@ -379,16 +376,9 @@
             const day2 = d2.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
             const h2 = d2.getHours(); const a2 = h2 >= 12 ? 'P' : 'A'; const hr2 = h2 % 12 || 12;
 
+            if(day1 === day2 && hr1 === hr2 && a1 === a2) return `${day1} ${hr1}${a1}`;
             if(day1 === day2) return `${day1} ${hr1}${a1} - ${hr2}${a2}`;
             return `${day1} ${hr1}${a1} - ${day2} ${hr2}${a2}`;
-        }
-
-        function getAlertIntel(eventName) {
-            const e = eventName.toLowerCase();
-            if(e.includes("airport weather")) return { impact: "Lightning within 5nm. Ground Stop in effect. Ramp closed." };
-            if(e.includes("high wind")) return { impact: "Southwest winds 30 to 45 mph with gusts up to 65 mph expected. Strong crosswinds on N-S runways." };
-            if(e.includes("winter weather")) return { impact: "Snow expected. Flash freeze likely. Plan on slippery road conditions. Total snow accumulations of 2 to 5 inches." };
-            return { impact: "Check local forecast for details." };
         }
 
         function getAlertConfig(eventStr) {
@@ -401,28 +391,7 @@
             return RISK_LEVELS[riskLevel];
         }
 
-        function getMockWinterForecast() {
-            let forecast = [];
-            for (let i = 0; i < TOTAL_HOURS; i++) {
-                let h = {
-                    Wind: 0, Lightning: 0, Hail: 0, Snow: 0, Visibility: 0, 
-                    FZRA: 0, FlashFreeze: 0, Rain: 0, Flooding: 0, Temp: 0
-                };
-                forecast.push(h);
-            }
-            return forecast;
-        }
-
-        function getRisk(prob) {
-            if (prob >= 90) return 5; 
-            if (prob >= 70) return 4; 
-            if (prob >= 40) return 3; 
-            if (prob >= 20) return 2; 
-            if (prob > 0) return 1; 
-            return 0; 
-        }
-
-        // --- LIVE DATA STATE ---
+        // --- DATA STATE ---
         let liveMetar = null;
         let liveAlerts = [];
 
@@ -431,72 +400,38 @@
             if (el) { el.textContent = msg; el.style.color = color || '#facc15'; }
         }
 
-        // --- METAR FETCH --- via Netlify serverless function (no CORS issues)
+        // --- FETCH METAR & ALERTS ---
         async function fetchMETAR() {
-            setStatus('⟳ Fetching METAR...', '#facc15');
             try {
-                const resp = await fetch('/.netlify/functions/metar');
-                if (!resp.ok) throw new Error(`function status ${resp.status}`);
-                const text = await resp.text();
-                if (text.startsWith('ERROR:')) throw new Error(text);
-                const lines = text.trim().split('\n');
-                const rawOb = lines[lines.length - 1].trim();
-                if (!rawOb.startsWith('KRNO')) throw new Error('unexpected format: ' + rawOb.substring(0,20));
-
-                setStatus('✓ Source: NOAA tgftp via Netlify function', '#22c55e');
-                const fromRaw = parseRawMETAR(rawOb);
-                liveMetar = { ...fromRaw, rawOb, reportTime: lines[0]?.trim() || null };
+                const resp = await fetch('https://api.weather.gov/stations/KRNO/observations/latest', {
+                    headers: { 'User-Agent': 'KRNO-DSS-Dashboard', 'Accept': 'application/geo+json' }
+                });
+                if (!resp.ok) throw new Error(`nws status ${resp.status}`);
+                const data = await resp.json();
+                const p = data.properties;
+                const msToKt = 1.94384;
+                const mToSm = 0.000621371;
+                liveMetar = {
+                    wdir: p.windDirection?.value ?? null,
+                    wspd: p.windSpeed?.value != null ? Math.round(p.windSpeed.value * msToKt) : 0,
+                    wgst: p.windGust?.value != null ? Math.round(p.windGust.value * msToKt) : 0,
+                    visib: p.visibility?.value != null ? Math.round(p.visibility.value * mToSm * 10) / 10 : 10,
+                    temp: p.temperature?.value ?? null,
+                    dewp: p.dewpoint?.value ?? null,
+                    clouds: (p.skyConditions || []).map(s => ({ cover: s.skyCover, base: s.cloudBase?.value != null ? Math.round(s.cloudBase.value * 3.28084) : null })).filter(s => s.cover && s.cover !== 'CLR' && s.cover !== 'SKC'),
+                    wxString: '',
+                    rawOb: p.rawMessage || '',
+                    reportTime: p.timestamp || null,
+                };
+                setStatus('✓ Source: api.weather.gov', '#22c55e');
                 applyMETARtoDisplay(liveMetar);
-
-            } catch(err) {
-                setStatus(`✗ Function failed (${err.message}) — trying api.weather.gov...`, '#f97316');
-                try {
-                    const resp2 = await fetch('https://api.weather.gov/stations/KRNO/observations/latest', {
-                        headers: { 'User-Agent': 'KRNO-DSS-Dashboard', 'Accept': 'application/geo+json' }
-                    });
-                    if (!resp2.ok) throw new Error(`nws status ${resp2.status}`);
-                    const data2 = await resp2.json();
-                    const p = data2.properties;
-                    if (!p) throw new Error('no properties');
-
-                    const msToKt = 1.94384;
-                    const mToSm = 0.000621371;
-                    liveMetar = {
-                        wdir: p.windDirection?.value ?? null,
-                        wspd: p.windSpeed?.value != null ? Math.round(p.windSpeed.value * msToKt) : 0,
-                        wgst: p.windGust?.value != null ? Math.round(p.windGust.value * msToKt) : 0,
-                        visib: p.visibility?.value != null ? Math.round(p.visibility.value * mToSm * 10) / 10 : 10,
-                        temp: p.temperature?.value ?? null,
-                        dewp: p.dewpoint?.value ?? null,
-                        clouds: (p.skyConditions || []).map(s => ({
-                            cover: s.skyCover,
-                            base: s.cloudBase?.value != null ? Math.round(s.cloudBase.value * 3.28084) : null
-                        })).filter(s => s.cover && s.cover !== 'CLR' && s.cover !== 'SKC'),
-                        wxString: '',
-                        rawOb: p.rawMessage || '',
-                        reportTime: p.timestamp || null,
-                    };
-                    if (liveMetar.rawOb) {
-                        Object.assign(liveMetar, parseRawMETAR(liveMetar.rawOb));
-                        setStatus('✓ Fallback: api.weather.gov + raw parser', '#22c55e');
-                    } else {
-                        setStatus('⚠ Fallback: api.weather.gov (wind may be inaccurate)', '#f97316');
-                    }
-                    applyMETARtoDisplay(liveMetar);
-
-                } catch(fallbackErr) {
-                    setStatus(`✗ ALL sources failed: ${fallbackErr.message}`, '#f44336');
-                    const dot = document.getElementById('live-dot');
-                    const label = document.getElementById('live-label');
-                    if (dot && label) { dot.style.background = '#f44336'; label.textContent = 'METAR ERR'; label.style.color = '#f44336'; }
-                }
+            } catch(e) {
+                setStatus(`✗ METAR Fetch failed: ${e.message}`, '#f44336');
             }
         }
 
-        // --- NWS ALERTS FETCH ---
         async function fetchAlerts() {
             try {
-                // KRNO lat/lon: 39.4986, -119.7681
                 const resp = await fetch('https://api.weather.gov/alerts/active?point=39.4986,-119.7681', {
                     headers: { 'User-Agent': 'KRNO-DSS-Dashboard, nws.reno@noaa.gov' }
                 });
@@ -509,100 +444,19 @@
                     const expires = p.expires ? new Date(p.expires) : new Date(now.getTime() + 3*3600000);
                     const startHr = Math.max(0, (onset - now) / 3600000);
                     const endHr = Math.min(TOTAL_HOURS, (expires - now) / 3600000);
-                    return {
-                        event: p.event || 'Unknown Alert',
-                        headline: p.headline || '',
-                        description: p.description || '',
-                        startHr: startHr,
-                        endHr: endHr > startHr ? endHr : startHr + 1,
-                        onset: onset,
-                        expires: expires
-                    };
-                }).filter(a => a.endHr > 0); // only show alerts not already expired
-            } catch(e) {
-                console.warn('Alerts fetch error:', e);
-            }
+                    return { event: p.event || 'Unknown Alert', headline: p.headline || '', startHr: startHr, endHr: endHr > startHr ? endHr : startHr + 1 };
+                }).filter(a => a.endHr > 0);
+            } catch(e) { console.warn('Alerts fetch error:', e); }
         }
 
-        // --- CELSIUS TO FAHRENHEIT ---
         function cToF(c) { return Math.round(c * 9/5 + 32); }
 
-        // --- RAW METAR PARSER ---
-        function parseRawMETAR(raw) {
-            if (!raw) return {};
-            const parsed = {};
-
-            // Wind: 27009KT or VRB05KT or 27009G18KT
-            const windMatch = raw.match(/(\d{3}|VRB)(\d{2,3})(G(\d{2,3}))?KT/);
-            if (windMatch) {
-                parsed.wdir = windMatch[1] === 'VRB' ? 0 : parseInt(windMatch[1]);
-                parsed.wspd = parseInt(windMatch[2]);
-                parsed.wgst = windMatch[4] ? parseInt(windMatch[4]) : 0;
-                parsed.isVRB = windMatch[1] === 'VRB';
-            }
-
-            // Visibility: 10SM or 1/4SM or 1 1/2SM
-            const visMatch = raw.match(/(\d+\s+\d+\/\d+|\d+\/\d+|\d+)SM/);
-            if (visMatch) {
-                const v = visMatch[1];
-                if (v.includes('/')) {
-                    const parts = v.trim().split(/\s+/);
-                    if (parts.length === 2) {
-                        const [whole, frac] = parts;
-                        const [n, d] = frac.split('/');
-                        parsed.visib = parseInt(whole) + parseInt(n) / parseInt(d);
-                    } else {
-                        const [n, d] = v.split('/');
-                        parsed.visib = parseInt(n) / parseInt(d);
-                    }
-                } else {
-                    parsed.visib = parseInt(v);
-                }
-            }
-
-            // Sky conditions: CLR, SKC, FEW020, SCT040, BKN250, OVC010
-            if (/\bCLR\b|\bSKC\b/.test(raw)) {
-                parsed.clouds = [];
-                parsed.isClear = true;
-            } else {
-                const skyRegex = /(FEW|SCT|BKN|OVC|VV)(\d{3})/g;
-                const clouds = [];
-                let m;
-                while ((m = skyRegex.exec(raw)) !== null) {
-                    clouds.push({ cover: m[1], base: parseInt(m[2]) * 100 });
-                }
-                parsed.clouds = clouds;
-                parsed.isClear = false;
-            }
-
-            // Temp/Dew: 22/01 or M02/M10
-            const tempMatch = raw.match(/\b(M?\d{2})\/(M?\d{2})\b/);
-            if (tempMatch) {
-                const parseTempC = s => s.startsWith('M') ? -parseInt(s.slice(1)) : parseInt(s);
-                parsed.temp = parseTempC(tempMatch[1]);
-                parsed.dewp = parseTempC(tempMatch[2]);
-            }
-
-            // Altimeter: A3011
-            const altMatch = raw.match(/A(\d{4})/);
-            if (altMatch) parsed.altim = parseInt(altMatch[1]) / 100;
-
-            // Present weather (RA, SN, FG, BR, etc.)
-            const wxCodes = ['TS','GR','GS','RA','SN','SG','IC','PL','DZ','FZRA','FZDZ','TSRA','TSSN','RASN','BLSN','BLDU','BLSA','FG','BCFG','MIFG','PRFG','BR','HZ','FU','VA','DU','SA','PO','FC','SS','DS'];
-            const wxFound = wxCodes.filter(w => new RegExp(`\\b[-+]?${w}\\b`).test(raw));
-            parsed.wxString = wxFound.join(' ');
-
-            return parsed;
-        }
-
-        // --- FLIGHT CATEGORY ---
         function getFlightCat(metar) {
             const vis = parseFloat(metar.visib) || 10;
-            const skyCover = metar.clouds || metar.sky || [];
+            const skyCover = metar.clouds || [];
             let ceiling = 99999;
-            const brkCover = ['BKN','OVC','VV'];
             for (const s of skyCover) {
-                if (brkCover.includes(s.cover) && s.base < ceiling) ceiling = s.base;
+                if (['BKN','OVC','VV'].includes(s.cover) && s.base < ceiling) ceiling = s.base;
             }
             if (ceiling < 500 || vis < 1) return { cat: 'LIFR', color: '#ff00ff' };
             if (ceiling < 1000 || vis < 3) return { cat: 'IFR', color: '#f44336' };
@@ -610,171 +464,61 @@
             return { cat: 'VFR', color: '#22c55e' };
         }
 
-        function getSkyDisplay(metar) {
-            if (metar.isClear || !metar.clouds || metar.clouds.length === 0) {
-                return { val: 'CLR', sub: 'CLEAR BELOW 12,000' };
-            }
-            const significant = metar.clouds.filter(s => ['BKN','OVC','VV'].includes(s.cover)).slice(-1)[0] || metar.clouds[0];
-            const base = significant.base ? String(Math.round(significant.base / 100)).padStart(3,'0') : '---';
-            return {
-                val: `${significant.cover}${base}`,
-                sub: metar.clouds.map(s => `${s.cover}@${s.base ? s.base + 'ft' : '?'}`).join(' ')
-            };
-        }
-
-        // --- APPLY LIVE METAR TO DISPLAY ---
         function applyMETARtoDisplay(m) {
-            // Wind
-            const wDir = m.wdir;
-            const wSpd = m.wspd || 0;
-            const wGst = m.wgst || 0;
-            const isCalm = wSpd === 0 && !m.isVRB;
-            const isVRB = m.isVRB || false;
+            const wDir = m.wdir; const wSpd = m.wspd || 0; const wGst = m.wgst || 0;
+            const isCalm = wSpd === 0;
             document.getElementById('w-spd').textContent = isCalm ? 'CALM' : wSpd;
             document.getElementById('w-spd').style.color = isCalm ? '#71717a' : getColor('wind', wSpd);
             document.getElementById('w-gst').textContent = wGst > 0 ? wGst : '--';
             document.getElementById('w-gst').style.color = wGst > 0 ? getColor('wind', wGst) : '#71717a';
-            document.querySelector('.wind-dir-text').textContent = isCalm ? 'CALM' : isVRB ? 'VRB' : `${wDir}°`;
+            document.querySelector('.wind-dir-text').textContent = isCalm ? 'CALM' : `${wDir}°`;
 
-            // Rotate wind arrow
             const arrowGroup = document.getElementById('wind-arrow');
             if (arrowGroup) {
-                if (isCalm || isVRB) {
-                    arrowGroup.style.opacity = '0.2';
-                } else {
-                    arrowGroup.style.opacity = '1';
-                    arrowGroup.setAttribute('transform', `rotate(${wDir}, 50, 50)`);
-                }
+                if (isCalm) arrowGroup.style.opacity = '0.2';
+                else { arrowGroup.style.opacity = '1'; arrowGroup.setAttribute('transform', `rotate(${wDir}, 50, 50)`); }
             }
 
-            // Crosswind badge
-            const xwindBadge = document.querySelector('.threat-badge');
-            if (xwindBadge) {
-                if (isCalm) {
-                    xwindBadge.textContent = 'X-WND OK';
-                    xwindBadge.style.background = '#22c55e';
-                    xwindBadge.style.color = '#fff';
-                } else if (isVRB) {
-                    xwindBadge.textContent = 'X-WND VRB';
-                    xwindBadge.style.background = '#ff9800';
-                    xwindBadge.style.color = '#fff';
-                } else {
-                    const rwyHdg = 160;
-                    const angleDiff = Math.abs(((wDir - rwyHdg + 180 + 360) % 360) - 180);
-                    const xwind = Math.round(wSpd * Math.sin(angleDiff * Math.PI / 180));
-                    xwindBadge.textContent = xwind > 3 ? `X-WND ${xwind}KT` : 'X-WND OK';
-                    xwindBadge.style.background = xwind > 15 ? '#f44336' : xwind > 8 ? '#ff9800' : '#22c55e';
-                    xwindBadge.style.color = '#fff';
-                }
-            }
-
-            // Visibility
             const visEl = document.querySelector('.asos-box:nth-child(2) .asos-value');
-            const visSub = document.querySelector('.asos-box:nth-child(2) .asos-sub');
             if (visEl) {
                 const vis = m.visib || 10;
                 visEl.textContent = vis >= 10 ? '10+ SM' : `${vis} SM`;
-                const visNum = parseFloat(vis) || 10;
-                visEl.style.color = visNum < 1 ? '#f44336' : visNum < 3 ? '#ff9800' : visNum < 5 ? '#2196f3' : 'white';
-            }
-            if (visSub) {
-                visSub.textContent = m.wxString || 'NONE';
+                visEl.style.color = vis < 1 ? '#f44336' : vis < 3 ? '#ff9800' : vis < 5 ? '#2196f3' : 'white';
             }
 
-            // Ceiling / Flight Cat
-            const skyDisplay = getSkyDisplay(m);
             const flightCat = getFlightCat(m);
-            const skyEl = document.getElementById('sky-val');
-            if (skyEl) {
-                skyEl.textContent = skyDisplay.val;
-                skyEl.style.color = 'white';
-            }
-            // Fix the hardcoded "ACS LENT" sub text
-            const ceilingSub = document.querySelectorAll('.asos-box')[2]?.querySelector('.asos-sub');
-            if (ceilingSub) {
-                ceilingSub.textContent = skyDisplay.sub || 'NO SIGNIFICANT CLOUD';
-            }
             const fcEl = document.querySelector('.flight-cat');
-            if (fcEl) {
-                fcEl.textContent = flightCat.cat;
-                fcEl.style.backgroundColor = flightCat.color;
-            }
+            if (fcEl) { fcEl.textContent = flightCat.cat; fcEl.style.backgroundColor = flightCat.color; }
 
-            // Temp / Dew
             const tC = m.temp !== undefined ? m.temp : null;
             const dC = m.dewp !== undefined ? m.dewp : null;
             if (tC !== null) {
-                const tF = cToF(tC);
-                const dF = dC !== null ? cToF(dC) : '--';
-                const rh = dC !== null ? Math.round(100 * Math.exp((17.625*dC)/(243.04+dC)) / Math.exp((17.625*tC)/(243.04+tC))) : '--';
+                const tF = cToF(tC); const dF = dC !== null ? cToF(dC) : '--';
                 document.getElementById('t-val').textContent = tF;
                 document.getElementById('t-val').style.color = getColor('temp', tF);
                 document.getElementById('d-val').textContent = dF;
                 if (dC !== null) document.getElementById('d-val').style.color = getColor('dew', dF);
-                document.getElementById('rh-val').textContent = `RH ${rh}%`;
-                if (typeof rh === 'number') document.getElementById('rh-val').style.color = getColor('rh', rh);
             }
 
-            // Raw METAR — use rawOb if available, otherwise build a basic string
             const metarEl = document.getElementById('metar-string');
-            if (metarEl) {
-                if (m.rawOb) {
-                    metarEl.textContent = m.rawOb;
-                } else {
-                    // Construct basic display string from parsed fields
-                    const wDirStr = isVRB ? 'VRB' : String(wDir).padStart(3,'0');
-                    const wSpdStr = String(wSpd).padStart(2,'0');
-                    const gstStr = wGst > 0 ? `G${String(wGst).padStart(2,'0')}` : '';
-                    const visStr = m.visib >= 10 ? '10SM' : `${m.visib}SM`;
-                    const tStr = tC !== null ? `${Math.round(tC)}/${Math.round(dC)}` : 'M/M';
-                    const altStr = m.altim ? `A${String(Math.round(m.altim * 100)).padStart(4,'0')}` : '';
-                    metarEl.textContent = `KRNO AUTO ${wDirStr}${wSpdStr}${gstStr}KT ${visStr} ${skyDisplay.val} ${tStr} ${altStr} (RAW MSG UNAVAILABLE FROM API)`;
-                }
-            }
-
-            // ASOS updated time
-            const asosTimeEl = document.getElementById('asos-time');
-            if (asosTimeEl && m.reportTime) {
-                const obs = new Date(m.reportTime);
-                const minsAgo = Math.round((new Date() - obs) / 60000);
-                asosTimeEl.textContent = minsAgo <= 1 ? 'UPDATED JUST NOW' : `UPDATED ${minsAgo}m AGO`;
-            }
-
-            // Live indicator
+            if (metarEl) metarEl.textContent = m.rawOb || 'API PARSED ONLY (NO RAW MSG)';
+            
             const dot = document.getElementById('live-dot');
             const label = document.getElementById('live-label');
-            if (dot && label) {
-                dot.style.background = '#22c55e';
-                label.textContent = 'METAR LIVE';
-                label.style.color = '#22c55e';
-            }
+            if (dot && label) { dot.style.background = '#22c55e'; label.textContent = 'METAR LIVE'; label.style.color = '#22c55e'; }
         }
 
-        // --- EXPLICIT TIMELINE COLORS ---
-        function getRiskForVariable(id, i) {
-            if (id === 'Wind') {
-                if (i <= 3) return 3; if (i <= 14) return 4; if (i <= 17) return 2; return 0; 
-            }
-            if (id === 'Snow') {
-                if (i === 15) return 2; if (i >= 16 && i <= 17) return 3; if (i >= 18 && i <= 22) return 4; if (i >= 23 && i <= 24) return 3; if (i === 25) return 2; return 0; 
-            }
-            if (id === 'Visibility') {
-                if (i >= 16 && i <= 17) return 2; if (i >= 18 && i <= 22) return 4; if (i >= 23 && i <= 24) return 2; return 0; 
-            }
-            if (id === 'FlashFreeze') {
-                if (i >= 14 && i <= 19) return 5; return 0; 
-            }
-            if (id === 'Temp') {
-                if (i < 15) return 0; return 3; 
-            }
-            // RAIN: 11P-1A => Green
-            if (id === 'Rain') {
-                if (i >= 13 && i <= 15) return 1; return 0; 
-            }
-            // LIGHTNING: 11P-6A => Green
-            if (id === 'Lightning') {
-                if (i >= 13 && i <= 20) return 1; return 0; 
-            }
+        // --- GET REFS RISK LEVEL FROM TIMELINE JSON ---
+        function getRiskForVariable(id, i, refsTimeline) {
+            if (!refsTimeline) return 0; // Grey out if REFS failed
+            const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE', 'Flooding': 'RAIN' };
+            const refKey = hazardMapping[id] || id.toUpperCase();
+            
+            const hourData = refsTimeline[refKey];
+            if (!hourData) return 0;
+            
+            const fxx = i + 1; // loop is 0-47, backend keys are 1-48
+            if (hourData[fxx]) return hourData[fxx].risk;
             return 0; 
         }
 
@@ -790,8 +534,7 @@
 
         function getHourLabel(date, offsetHours) {
             const d = new Date(date.getTime() + offsetHours * 3600000);
-            let hours = d.getHours();
-            const ampm = hours >= 12 ? 'P' : 'A';
+            let hours = d.getHours(); const ampm = hours >= 12 ? 'P' : 'A';
             hours = hours % 12; hours = hours ? hours : 12;
             const zulu = d.getUTCHours().toString().padStart(2,'0');
             return `${hours}${ampm}/${zulu}Z`;
@@ -801,10 +544,7 @@
             isAWWActive = !isAWWActive;
             renderWWA(globalNow);
             const btn = document.getElementById('aww-toggle');
-            if(btn) {
-                if(isAWWActive) btn.classList.add('active');
-                else btn.classList.remove('active');
-            }
+            if(btn) { if(isAWWActive) btn.classList.add('active'); else btn.classList.remove('active'); }
         }
 
         function renderWWA(now) {
@@ -816,20 +556,13 @@
 
             if(!wwaContainer) return; 
 
-            // Use live alerts if available, otherwise fall back to demo
-            let alerts = liveAlerts.length > 0 ? liveAlerts : [
-                { event: "High Wind Warning", startHr: 4, endHr: 16 },
-                { event: "Winter Weather Advisory", startHr: 16, endHr: 25 },
-            ];
-
+            let alerts = liveAlerts.length > 0 ? liveAlerts : [];
             if(isAWWActive) {
                 const hasAWW = alerts.some(a => a.event.includes("Airport Weather Warning"));
                 if(!hasAWW) alerts.unshift({ event: "Airport Weather Warning", startHr: 0, endHr: 1 });
             }
 
-            alerts.forEach(a => {
-                if (SHORT_FUSED_WARNINGS.some(s => a.event.includes(s))) a.startHr = Math.max(0, a.startHr);
-            });
+            alerts.forEach(a => { if (SHORT_FUSED_WARNINGS.some(s => a.event.includes(s))) a.startHr = Math.max(0, a.startHr); });
             
             let wwaTitle = "ACTIVE ALERTS";
             const eventStr = alerts.map(a => a.event.toLowerCase()).join(' ');
@@ -855,28 +588,16 @@
 
             alerts.forEach((alert, index) => {
                 const config = getAlertConfig(alert.event);
-                const intel = getAlertIntel(alert.event);
-                const isAWW = alert.event.includes("Airport Weather Warning");
-                const flashClass = isAWW ? "animate-flash" : "";
-
+                const flashClass = alert.event.includes("Airport Weather Warning") ? "animate-flash" : "";
                 const startTimeLabel = getSimpleTime(now, alert.startHr);
                 const endTimeLabel = getSimpleTime(now, alert.endHr);
 
                 const listItem = document.createElement('div');
                 listItem.className = `wwa-item py-2 px-3 rounded-sm text-sm mb-2 flex justify-between items-center border-l-4 ${flashClass}`;
-                listItem.style.backgroundColor = '#27272a';
-                listItem.style.borderLeftColor = config.color;
-                listItem.style.color = '#e4e4e7';
-                listItem.innerHTML = `
-                    <span class="font-bold tracking-wide uppercase">${alert.event}</span>
-                    <span class="font-mono text-xs opacity-70">+${alert.startHr}h</span>
-                `;
+                listItem.style.backgroundColor = '#27272a'; listItem.style.borderLeftColor = config.color; listItem.style.color = '#e4e4e7';
+                listItem.innerHTML = `<span class="font-bold tracking-wide uppercase">${alert.event}</span><span class="font-mono text-xs opacity-70">+${Math.round(alert.startHr)}h</span>`;
                 
-                const tHtml = `
-                    <div class="font-bold text-xs mb-1 text-white uppercase border-b border-gray-600 pb-1">${alert.event}</div>
-                    <div class="text-[10px] text-gray-300 font-mono mb-1">Valid: ${startTimeLabel} - ${endTimeLabel}</div>
-                    <div class="text-[9px] text-gray-400 italic leading-tight">${alert.headline || intel.impact}</div>
-                `;
+                const tHtml = `<div class="font-bold text-xs mb-1 text-white uppercase border-b border-gray-600 pb-1">${alert.event}</div><div class="text-[10px] text-gray-300 font-mono mb-1">Valid: ${startTimeLabel} - ${endTimeLabel}</div><div class="text-[9px] text-gray-400 italic leading-tight">${alert.headline}</div>`;
                 
                 listItem.addEventListener('mouseenter', () => showTooltip(tHtml));
                 listItem.addEventListener('mouseleave', hideTooltip);
@@ -888,12 +609,7 @@
                 
                 const bar = document.createElement('div');
                 bar.className = `warning-block ${flashClass}`;
-                bar.style.backgroundColor = config.color;
-                bar.style.left = `${left}%`;
-                bar.style.width = `${width}%`;
-                bar.style.top = `${top}%`;
-                bar.style.height = `30%`;
-                bar.style.color = config.textColor; 
+                bar.style.backgroundColor = config.color; bar.style.left = `${left}%`; bar.style.width = `${width}%`; bar.style.top = `${top}%`; bar.style.height = `30%`; bar.style.color = config.textColor; 
                 bar.innerHTML = `<span class="px-1 truncate font-mono">${alert.event.toUpperCase()} (${startTimeLabel}-${endTimeLabel})</span>`;
                 
                 bar.addEventListener('mouseenter', () => showTooltip(tHtml));
@@ -916,8 +632,7 @@
 
         function getSimpleTime(startDate, offsetHours) {
             const d = new Date(startDate.getTime() + offsetHours * 3600000);
-            let hours = d.getHours();
-            const ampm = hours >= 12 ? 'P' : 'A';
+            let hours = d.getHours(); const ampm = hours >= 12 ? 'P' : 'A';
             hours = hours % 12; hours = hours ? hours : 12;
             return `${hours}${ampm}`;
         }
@@ -925,45 +640,52 @@
         async function initDashboard() {
             try {
                 globalNow = new Date();
-                const forecast = getMockWinterForecast();
-
                 const timeEl = document.getElementById('timestamp2');
                 if(timeEl) timeEl.textContent = getHeaderDate(globalNow);
 
-                // --- FETCH LIVE DATA ---
-                await Promise.all([fetchMETAR(), fetchAlerts()]);
+                // --- FETCH LIVE DATA: METAR, Alerts, AND REFS ---
+                const [metarResp, alertsResp, threatsResp, timelineResp] = await Promise.allSettled([
+                    fetchMETAR(), 
+                    fetchAlerts(),
+                    fetch(`${BACKEND_URL}/api/threats`).then(r => r.json()),
+                    fetch(`${BACKEND_URL}/api/timeline`).then(r => r.json())
+                ]);
 
-                // --- FALLBACK METAR display if live fetch didn't populate ---
+                // Extract REFS data
+                let refsThreats = null;
+                let refsTimeline = null;
+                
+                if (threatsResp.status === 'fulfilled' && threatsResp.value.threats) {
+                    refsThreats = threatsResp.value.threats;
+                }
+                if (timelineResp.status === 'fulfilled' && timelineResp.value.timeline) {
+                    refsTimeline = timelineResp.value.timeline;
+                }
+
+                // If fallback METAR didn't populate
                 if (!liveMetar) {
                     const metarEl = document.getElementById('metar-string');
                     if(metarEl) metarEl.textContent = 'AWAITING METAR...';
-                    // Apply static colors for fallback
-                    const wSpd = 22, wGst = 32, tVal = 55, dVal = 28, rhVal = 35;
-                    document.getElementById('w-spd').style.color = getColor('wind', wSpd);
-                    document.getElementById('w-gst').style.color = getColor('wind', wGst);
-                    document.getElementById('t-val').style.color = getColor('temp', tVal);
-                    document.getElementById('d-val').style.color = getColor('dew', dVal);
-                    document.getElementById('rh-val').style.color = getColor('rh', rhVal);
-                    document.getElementById('sky-val').style.color = getColor('sky', 75);
                 }
 
                 // --- MATRIX ---
                 const grid = document.getElementById('hazards-grid');
                 if(grid) {
                     grid.innerHTML = '';
-                    const hazards = HAZARD_DETAILS.map(h => {
-                        return { ...h, prob: 0, risk: 0 }; 
-                    });
+                    
+                    const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE', 'Flooding': 'RAIN' };
 
-                    // FORCE CARD VALUES
-                    hazards.forEach(h => {
-                        if(h.id === 'Wind') { h.prob = 70; h.risk = 4; }
-                        else if(h.id === 'Visibility') { h.prob = 75; h.risk = 4; }
-                        else if(h.id === 'Temp') { h.prob = 60; h.risk = 3; }
-                        else if(h.id === 'FlashFreeze') { h.prob = 70; h.risk = 5; }
-                        else if(h.id === 'Snow') { h.prob = 80; h.risk = 4; }
-                        else if(h.id === 'Hail' || h.id === 'FZRA' || h.id === 'Flooding') { h.prob = 0; h.risk = 0; }
-                        else { h.prob = 15; h.risk = 1; } // Rain & Lightning -> Green
+                    // OVERRIDE WITH LIVE REFS PROBABILITIES
+                    const hazards = HAZARD_DETAILS.map(h => {
+                        let prob = 0;
+                        let risk = 0;
+                        const refKey = hazardMapping[h.id] || h.id.toUpperCase();
+                        
+                        if (refsThreats && refsThreats[refKey]) {
+                            prob = refsThreats[refKey].prob;
+                            risk = refsThreats[refKey].risk;
+                        }
+                        return { ...h, prob, risk }; 
                     });
 
                     hazards.sort((a, b) => {
@@ -980,7 +702,7 @@
                         const valColor = isGrey ? '#52525b' : '#ffffff'; 
                         const displayVal = `${h.prob}`;
                         const displayMetric = h.metric || '--';
-                        const timeString = getHazardTimeString(h.id);
+                        const timeString = getHazardTimeString(h.id, refsTimeline);
 
                         const card = document.createElement('div');
                         card.className = 'ops-card flex flex-col justify-between p-3';
@@ -995,14 +717,13 @@
                             <i class="ph ${h.icon} watermark-icon" style="color: ${borderColor};"></i>
                         `;
                         
-                        // Enhanced Tooltip with "Read Out" format
                         const tHtml = `
                             <div class="flex justify-between border-b border-gray-700 pb-1 mb-2">
                                 <span class="font-bold uppercase text-gray-400">${h.name}</span>
                                 <span class="font-mono text-${config.name === 'None' ? 'gray-500' : 'white'}">${displayVal}% Prob</span>
                             </div>
                             <div class="mb-2">
-                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded" style="background-color: ${config.color}; color: ${config.textColor}">CURRENT STATUS: ${config.name.toUpperCase()} THREAT</span>
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded" style="background-color: ${config.color}; color: ${config.textColor}">STATUS: ${config.name.toUpperCase()} THREAT</span>
                             </div>
                             <div class="text-[10px] italic text-gray-400 bg-gray-800 p-1 rounded mb-1">Threshold: ${displayMetric}</div>
                             ${h.risk >= 1 ? `<div class="mt-1 text-[10px] text-gray-300 border-t border-gray-700 pt-1"><span class="font-bold text-gray-500 uppercase">Action:</span> ${h.prep}</div>` : ''}
@@ -1027,7 +748,6 @@
                         const isDay = (new Date(globalNow.getTime() + i*3600000).getHours() >= 6 && new Date(globalNow.getTime() + i*3600000).getHours() < 18);
                         const classStr = isDay ? 'day-segment' : 'night-segment';
                         const width = 100 / TOTAL_HOURS;
-                        // Add hover interaction to timeline background columns
                         bgCtx.innerHTML += `<div class="${classStr}" style="width: ${width}%;" onmouseenter="showHourTooltip(${i})" onmouseleave="hideTooltip()"></div>`;
                         if (new Date(globalNow.getTime() + i*3600000).getHours() === 0) {
                             const leftPos = (i / TOTAL_HOURS) * 100;
@@ -1056,8 +776,9 @@
                             <div class="horizontal-guide"></div>
                             <div class="bar-container">`;
                         
+                        // Pass refsTimeline into getRiskForVariable to draw the exact data points!
                         for (let i = 0; i < TOTAL_HOURS; i++) {
-                            const risk = getRiskForVariable(h.id, i);
+                            const risk = getRiskForVariable(h.id, i, refsTimeline);
                             const safeRisk = risk || 0;
                             const config = RISK_LEVELS[safeRisk] || RISK_LEVELS[0];
                             const width = 100 / TOTAL_HOURS;
