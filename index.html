@@ -8,36 +8,95 @@
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        /* BASE LAYOUT */
         html, body { height: 100%; margin: 0; overflow: hidden; background-color: #0f0f12; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        
         .panel { background-color: #18181b; border: 1px solid #27272a; border-radius: 6px; display: flex; flex-direction: column; min-height: 200px; height: 100%; }
+        
+        /* INTERACTIVITY */
         .ops-card { position: relative; border-radius: 6px; background: #27272a; transition: all 0.2s ease; border: 1px solid transparent; cursor: crosshair; }
         .ops-card:hover { background: #3f3f46; border-color: #71717a; }
+        
+        /* TYPOGRAPHY */
         .hazard-val { font-family: 'JetBrains Mono', monospace; font-size: 2.5rem; font-weight: 700; letter-spacing: -2px; line-height: 1; z-index: 10; position: relative; display: flex; align-items: flex-start; }
         .percent-sign { font-size: 1.2rem; margin-top: 6px; opacity: 0.7; margin-left: 2px; }
         .hazard-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #a1a1aa; z-index: 10; position: relative; line-height: 1.1; }
         .hazard-criteria { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #71717a; margin-top: 2px; z-index: 10; position: relative; font-weight: 700; }
         .hazard-time { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; margin-top: 4px; z-index: 10; position: relative; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
         .watermark-icon { position: absolute; right: -8px; bottom: -8px; font-size: 4rem; opacity: 0.12; transform: rotate(-10deg); z-index: 0; pointer-events: none; }
-        #global-tooltip { position: fixed; top: 0; left: 0; width: 260px; background-color: #09090b; border: 1px solid #52525b; color: #fff; padding: 12px; border-radius: 4px; font-size: 0.75rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.8); pointer-events: none; z-index: 9999; opacity: 0; transition: opacity 0.1s ease; transform: translate(15px, 15px); }
+
+        /* TOOLTIP */
+        #global-tooltip {
+            position: fixed; top: 0; left: 0; width: 260px;
+            background-color: #09090b; border: 1px solid #52525b; color: #fff;
+            padding: 12px; border-radius: 4px; font-size: 0.75rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.8), 0 10px 10px -5px rgba(0, 0, 0, 0.5);
+            pointer-events: none; z-index: 9999; opacity: 0;
+            transition: opacity 0.1s ease, transform 0.1s ease;
+            transform: translate(15px, 15px);
+        }
         #global-tooltip.visible { opacity: 1; }
+
+        /* TIMELINE */
         .timeline-row { display: flex; align-items: center; height: 100%; width: 100%; position: relative; z-index: 10; }
         .horizontal-guide { position: absolute; top: 50%; left: 0; right: 0; border-top: 1px dashed #52525b; opacity: 0.25; z-index: 0; pointer-events: none; }
         .bar-container { flex-grow: 1; height: 10px; border-radius: 0px; display: block; overflow: visible; position: relative; z-index: 10; } 
-        .timeline-block { position: absolute; height: 100%; top: 0; display: block; border-radius: 0px; cursor: help; transition: opacity 0.1s; z-index: 30; }
+        
+        .timeline-block {
+            position: absolute; height: 100%; top: 0;
+            display: block; 
+            border-radius: 0px; 
+            cursor: help;
+            transition: opacity 0.1s;
+            z-index: 30; 
+        }
         .timeline-block:hover { opacity: 0.85; z-index: 50; }
-        .midnight-line { border-left: 1px solid #94a3b8; height: 100%; position: absolute; top: 0; z-index: 5; opacity: 0.3; }
-        .midnight-label { position: absolute; top: -15px; transform: translateX(-50%); font-size: 10px; font-weight: bold; color: #94a3b8; background: #18181b; padding: 0 2px; }
+
+        /* WARNING BAR */
+        .warning-block {
+            position: absolute; height: 100%; top: 0;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 2px;
+            cursor: help;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            font-size: 9px; font-weight: 800;
+            z-index: 30;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+            padding: 0 4px;
+        }
+
         .day-segment { background-color: rgba(255, 255, 255, 0.03); } 
         .night-segment { background-color: rgba(0, 0, 0, 0.2); }      
+        
+        /* Highlight hour column on hover */
+        .day-segment:hover, .night-segment:hover { background-color: rgba(255, 255, 255, 0.1); cursor: crosshair; }
+
+        .midnight-line { border-left: 1px solid #94a3b8; height: 100%; position: absolute; top: 0; z-index: 5; opacity: 0.3; }
+        .midnight-label { position: absolute; top: -15px; transform: translateX(-50%); font-size: 10px; font-weight: bold; color: #94a3b8; background: #18181b; padding: 0 2px; }
+        
+        .wwa-item { cursor: help; transition: background 0.2s; }
+        .wwa-item:hover { background-color: #3f3f46 !important; }
+
+        @keyframes flash-alert { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+        .animate-flash { animation: flash-alert 1s infinite ease-in-out; }
+
+        /* ASOS */
+        .asos-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; height: 100%; }
         .asos-box { background: #27272a; border-radius: 4px; padding: 10px; display: flex; flex-direction: column; justify-content: flex-start; position: relative; overflow: hidden; }
         .asos-label { font-size: 0.7rem; color: #a1a1aa; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 2px; z-index: 10; }
         .asos-value { font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; color: white; font-weight: 700; leading: 1; z-index: 10; margin-top: auto; margin-bottom: auto;}
         .asos-sub { font-size: 0.75rem; color: #71717a; margin-top: 2px; z-index: 10; font-weight: 700; }
+        
         .flight-cat { position: absolute; top: 10px; right: 10px; background: #22c55e; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 800; z-index: 10; }
         .threat-badge { position: absolute; top: 10px; right: 10px; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 800; z-index: 10; color: #18181b; }
+        .threat-minor { background-color: #ffeb3b; }
+
+        /* WIND ROSE */
         .wind-wrapper { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 90px; }
         .wind-rose-svg { width: 100%; height: 100%; max-height: 110px; overflow: visible; display: block; }
+        .wind-stats { width: 100%; text-align: center; margin-top: -5px; z-index: 20; position: relative; }
         .wind-speed-row { font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 800; color: white; line-height: 1; display: flex; align-items: baseline; justify-content: center; gap: 4px; }
+        .wind-dir-text { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; font-weight: 700; color: #a1a1aa; margin-top: 0px; }
     </style>
 </head>
 <body class="p-2 lg:p-4 h-screen box-border relative">
@@ -50,8 +109,8 @@
             <div class="flex justify-between items-center mb-3">
                 <div class="flex items-center gap-4">
                     <div class="flex items-center gap-3">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/7/79/NOAA_logo.svg" alt="NOAA" class="h-10 w-10">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/f/ff/US-NationalWeatherService-Logo.svg" alt="NWS" class="h-10 w-10">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/7/79/NOAA_logo.svg" alt="NOAA" class="h-10 w-10 drop-shadow-md">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/f/ff/US-NationalWeatherService-Logo.svg" alt="NWS" class="h-10 w-10 drop-shadow-md">
                         <div class="flex flex-col justify-center ml-1">
                             <span class="text-[10px] font-bold text-slate-500 uppercase leading-none">National</span>
                             <span class="text-[10px] font-bold text-slate-500 uppercase leading-none">Weather Service</span>
@@ -65,21 +124,25 @@
                     <span class="text-[10px] uppercase text-green-500 font-bold tracking-widest" id="live-label">Live</span>
                 </div>
             </div>
-            <div id="hazards-grid" class="grid grid-cols-5 gap-3 flex-grow h-full relative"></div>
+            
+            <div id="hazards-grid" class="grid grid-cols-5 gap-3 flex-grow h-full relative" style="z-index: 10;"></div>
+            
             <div class="flex justify-end items-center mt-3 pt-2 border-t border-[#27272a] gap-4">
                  <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #3f3f46;"></div>None</div>
-                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #6b7280;"></div>L-None</div>
-                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #eab308;"></div>Minor</div>
-                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #f97316;"></div>Mod</div>
-                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #ef4444;"></div>Major</div>
-                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #a855f7;"></div>Extreme</div>
+                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #e2f0cb;"></div>Little to None</div>
+                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #ffeb3b;"></div>Minor</div>
+                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #ff9800;"></div>Moderate</div>
+                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #f44336;"></div>Major</div>
+                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #9c27b0;"></div>Extreme</div>
             </div>
         </div>
 
         <div class="panel p-4" style="z-index: 10;">
             <div class="flex justify-between items-center mb-2">
-                <h2 class="font-bold text-base tracking-wider uppercase text-slate-300">Timeline Analysis</h2>
-                <p class="text-xs text-slate-400 font-mono font-bold" id="timestamp2"></p>
+                <div class="flex items-center gap-3">
+                    <h2 class="font-bold text-base tracking-wider uppercase text-slate-300">Timeline Analysis</h2>
+                </div>
+                <p class="text-xs text-slate-400 font-mono tracking-tight font-bold" id="timestamp2"></p>
             </div>
             <div class="flex flex-col flex-grow h-full relative">
                 <div class="flex flex-grow w-full relative">
@@ -90,166 +153,628 @@
                         <div id="timeline-bars" class="absolute inset-0 z-20 flex flex-col justify-around py-1 pl-1 pointer-events-none"></div>
                     </div>
                 </div>
-                <div class="h-10 flex w-full pl-24 relative mt-1"><div id="timeline-axis" class="w-full h-full relative text-xs text-slate-400"></div></div>
+                <div class="h-10 flex w-full pl-24 relative mt-1">
+                    <div id="timeline-axis" class="w-full h-full relative text-xs text-slate-400"></div>
+                </div>
             </div>
         </div>
 
         <div class="panel p-4" style="z-index: 10;">
             <div class="flex justify-between items-center mb-3">
                  <div class="flex items-center gap-3">
-                    <h2 class="font-bold text-base tracking-wider uppercase text-slate-300">CURRENT OBSERVATIONS</h2>
+                    <h2 class="font-bold text-base tracking-wider uppercase text-slate-300">CURRENT WEATHER OBSERVATIONS</h2>
                     <span class="text-xs font-mono text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded border border-purple-400/20">KRNO</span>
                  </div>
-                 <div class="text-[10px] text-slate-500 font-mono" id="asos-time">FETCHING...</div>
+                 <div class="text-[10px] text-slate-500 font-mono" id="asos-time">UPDATED 1m AGO</div>
             </div>
+            
             <div class="flex-grow flex flex-col gap-3">
                 <div class="flex-1 grid grid-cols-4 gap-3">
+                    
                     <div class="asos-box relative">
                         <div class="asos-label absolute top-2 left-2">WIND</div>
                         <div class="threat-badge threat-minor">X-WIND</div>
+                        
                         <div class="wind-wrapper pt-3">
-                            <svg class="wind-rose-svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="none" stroke="#52525b" stroke-width="1.5" />
-                                <g id="wind-arrow" transform="rotate(0, 50, 50)"><path d="M50 45 L45 35 L50 38 L55 35 Z" fill="#fbbf24" /><line x1="50" y1="5" x2="50" y2="38" stroke="#fbbf24" stroke-width="2" /></g>
+                            <svg class="wind-rose-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+                                <circle cx="50" cy="50" r="45" fill="none" stroke="#52525b" stroke-width="1.5" />
+                                <path d="M50 5 L50 10 M95 50 L90 50 M50 95 L50 90 M5 50 L10 50" stroke="#71717a" stroke-width="2" />
+                                <g opacity="0.6">
+                                    <line x1="55" y1="15" x2="55" y2="85" stroke="#a1a1aa" stroke-width="4" stroke-linecap="butt" />
+                                    <line x1="45" y1="15" x2="45" y2="85" stroke="#a1a1aa" stroke-width="4" stroke-linecap="butt" />
+                                    <line x1="15" y1="55" x2="85" y2="55" stroke="#a1a1aa" stroke-width="4" stroke-linecap="butt" />
+                                </g>
+                                <g id="wind-arrow" transform="rotate(250, 50, 50)">
+                                    <path d="M50 45 L45 35 L50 38 L55 35 Z" fill="#fbbf24" />
+                                    <line x1="50" y1="5" x2="50" y2="38" stroke="#fbbf24" stroke-width="2" />
+                                    <circle cx="50" cy="50" r="2" fill="#fbbf24" />
+                                </g>
                             </svg>
                         </div>
-                        <div class="wind-stats pb-1 text-center"><div class="wind-speed-row"><span id="w-spd">--</span><span class="text-xs text-gray-500 self-center">G</span><span id="w-gst">--</span></div><div class="text-[10px] text-gray-400" id="w-dir">--°</div></div>
+                        
+                        <div class="wind-stats pb-1">
+                            <div class="wind-speed-row" id="wind-vals">
+                                <span id="w-spd">22</span>
+                                <span class="text-xs text-gray-500 font-normal self-center">G</span>
+                                <span id="w-gst">32</span>
+                                <span class="text-xs text-gray-500 font-normal self-center">KT</span>
+                            </div>
+                            <div class="wind-dir-text">250°</div>
+                        </div>
                     </div>
-                    <div class="asos-box"><div class="asos-label">VISIBILITY</div><div class="asos-value" id="vis-val">-- SM</div><div class="asos-sub" id="wx-val">NONE</div></div>
-                    <div class="asos-box"><div class="flight-cat" id="f-cat">VFR</div><div class="asos-label">CEILING</div><div class="asos-value" id="sky-val">CLR</div><div class="asos-sub" id="sky-sub">CLEAR</div></div>
-                    <div class="asos-box"><div class="asos-label">TEMP / DEW</div><div class="asos-value"><span id="t-val">--</span><span class="text-lg text-gray-500">/</span><span id="d-val">--</span><span class="text-sm align-top text-gray-500">°F</span></div><div class="asos-sub" id="rh-val">RH --%</div></div>
+                    
+                    <div class="asos-box">
+                        <div class="asos-label">VISIBILITY</div>
+                        <div class="asos-value text-white">10 SM</div>
+                        <div class="asos-sub font-bold text-gray-400">NONE</div>
+                        <i class="ph-fill ph-eye absolute bottom-2 right-2 text-3xl opacity-10"></i>
+                    </div>
+
+                    <div class="asos-box">
+                        <div class="flight-cat">VFR</div>
+                        <div class="asos-label">CEILING</div>
+                        <div class="asos-value" id="sky-val">BKN250</div>
+                        <div class="asos-sub">ACS LENT</div>
+                        <i class="ph-fill ph-cloud absolute bottom-2 right-2 text-3xl opacity-10"></i>
+                    </div>
+
+                    <div class="asos-box">
+                        <div class="asos-label">TEMP / DEW</div>
+                        <div class="asos-value"><span id="t-val">55</span><span class="text-lg text-gray-500">/</span><span id="d-val">28</span><span class="text-sm align-top text-gray-500">°F</span></div>
+                        <div class="asos-sub" id="rh-val">RH 35%</div>
+                        <i class="ph-fill ph-thermometer absolute bottom-2 right-2 text-3xl opacity-10"></i>
+                    </div>
                 </div>
-                <div class="flex-1 bg-black rounded p-3 font-mono text-xs text-green-400 border border-gray-800"><p id="metar-string">LOADING METAR...</p></div>
+
+                <div class="flex-1 bg-black rounded p-3 font-mono text-sm text-green-400 overflow-hidden relative border border-gray-800 flex flex-col gap-1">
+                    <div class="absolute top-1 right-2 text-[9px] text-gray-600 font-sans font-bold">RAW METAR</div>
+                    <p class="leading-snug" id="metar-string">LOADING...</p>
+                    <div id="fetch-status" class="text-[10px] text-yellow-500 font-bold mt-1 border-t border-gray-800 pt-1">⟳ FETCHING DATA...</div>
+                </div>
             </div>
         </div>
 
         <div class="panel p-4 flex flex-col" style="z-index: 20;">
-            <div class="flex justify-between items-center mb-2"><h2 id="wwa-title-text" class="font-bold text-base uppercase text-slate-300">Active Advisories</h2></div>
-            <div id="wwa-container" class="space-y-2 overflow-y-auto flex-grow pr-1"></div>
+            <div class="flex justify-between items-center mb-2">
+                <h2 id="wwa-title-text" class="font-bold text-base tracking-wider uppercase text-slate-300">Active Advisories</h2>
+            </div>
+            
+            <div class="h-24 border-b border-[#27272a] pb-3 mb-2 relative flex-shrink-0 flex">
+                <div class="w-24 flex-shrink-0 border-r border-[#27272a]/50"></div> <div class="flex-grow relative flex flex-col justify-end">
+                    <div class="w-full h-10 relative bg-[#09090b] rounded-sm overflow-visible mb-1 border border-[#27272a]">
+                         <div id="wwa-bg" class="absolute inset-0 z-0 flex w-full h-full overflow-hidden"></div>
+                         <div id="wwa-lines" class="absolute inset-0 z-10 w-full h-full pointer-events-none overflow-hidden"></div>
+                         <div id="wwa-timeline-bars" class="absolute inset-0 z-20"></div>
+                    </div>
+                    <div id="wwa-axis" class="relative h-6 w-full text-xs text-slate-400"></div>
+                </div>
+            </div>
+
+            <div id="wwa-container" class="space-y-2 overflow-y-auto flex-grow pr-1 relative z-30"></div>
         </div>
     </div>
 
     <script>
-        const BACKEND_URL = "https://factsheet-aim-washstand.ngrok-free.dev"; 
+        // --- BACKEND URL ---
+        const BACKEND_URL = "https://factsheet-aim-washstand.ngrok-free.dev"; // Update this if ngrok restarts
+
         const TOTAL_HOURS = 48; 
         let globalNow = new Date(); 
 
-        const RISK_LEVELS = {
-            5: { name: "Extreme", color: '#a855f7', textColor: '#ffffff' }, 4: { name: "Major", color: '#ef4444', textColor: '#ffffff' },   
-            3: { name: "Moderate", color: '#f97316', textColor: '#ffffff' }, 2: { name: "Minor", color: '#eab308', textColor: '#000000' },   
-            1: { name: "Little to None", color: '#6b7280', textColor: '#ffffff' }, 0: { name: "None", color: '#3a3a3a', textColor: '#71717a' } 
+        // --- CUSTOM COLOR SCALES ---
+        const COLOR_SCALES = {
+            temp: [{max:5,color:'rgb(13,61,156)'},{max:10,color:'rgb(0,102,194)'},{max:15,color:'rgb(41,158,255)'},{max:20,color:'rgb(74,199,255)'},{max:25,color:'rgb(115,215,255)'},{max:30,color:'rgb(173,255,255)'},{max:35,color:'rgb(48,207,194)'},{max:40,color:'rgb(0,153,150)'},{max:45,color:'rgb(18,87,87)'},{max:50,color:'rgb(6,109,44)'},{max:55,color:'rgb(49,163,84)'},{max:60,color:'rgb(116,196,118)'},{max:65,color:'rgb(161,217,155)'},{max:70,color:'rgb(211,255,190)'},{max:999,color:'rgb(255,255,179)'}],
+            dew: [{max:0,color:'rgb(59,34,4)'},{max:10,color:'rgb(84,48,5)'},{max:20,color:'rgb(140,82,10)'},{max:30,color:'rgb(191,129,45)'},{max:40,color:'rgb(204,168,84)'},{max:45,color:'rgb(223,194,125)'},{max:999,color:'rgb(230,217,181)'}],
+            rh: [{max:5,color:'rgb(145,0,34)'},{max:10,color:'rgb(166,17,34)'},{max:15,color:'rgb(189,46,36)'},{max:20,color:'rgb(212,78,51)'},{max:25,color:'rgb(227,109,66)'},{max:30,color:'rgb(250,143,67)'},{max:35,color:'rgb(252,173,88)'},{max:40,color:'rgb(254,216,132)'},{max:50,color:'rgb(255,242,170)'},{max:999,color:'rgb(230,244,157)'}],
+            wind: [{max:5,color:'rgb(16,63,120)'},{max:10,color:'rgb(34,94,168)'},{max:15,color:'rgb(29,145,192)'},{max:20,color:'rgb(65,182,196)'},{max:25,color:'rgb(127,205,187)'},{max:30,color:'rgb(180,215,158)'},{max:35,color:'rgb(223,255,158)'},{max:40,color:'rgb(255,255,166)'},{max:45,color:'rgb(255,232,115)'},{max:50,color:'rgb(255,196,0)'},{max:999,color:'rgb(255,170,0)'}],
+            sky: [{max:10,color:'rgb(36,160,242)'},{max:20,color:'rgb(78,176,242)'},{max:30,color:'rgb(128,183,248)'},{max:40,color:'rgb(160,200,255)'},{max:50,color:'rgb(210,225,255)'},{max:60,color:'rgb(225,225,225)'},{max:70,color:'rgb(201,201,201)'},{max:80,color:'rgb(165,165,165)'},{max:90,color:'rgb(110,110,110)'},{max:100,color:'rgb(80,80,80)'}]
         };
 
+        function getColor(scaleName, value) {
+            const scale = COLOR_SCALES[scaleName];
+            for(let s of scale) {
+                if (value <= s.max) return s.color;
+            }
+            return scale[scale.length-1].color;
+        }
+
+        const RISK_LEVELS = {
+            5: { name: "Extreme", color: '#9c27b0', textColor: '#ffffff' }, 
+            4: { name: "Major", color: '#f44336', textColor: '#ffffff' },   
+            3: { name: "Moderate", color: '#ff9800', textColor: '#000000' }, 
+            2: { name: "Minor", color: '#ffeb3b', textColor: '#000000' },   
+            1: { name: "Little to None", color: '#e2f0cb', textColor: '#000000' }, 
+            0: { name: "None", color: '#3f3f46', textColor: '#71717a' } 
+        };
+
+        const SHORT_FUSED_WARNINGS = ["Severe Thunderstorm Warning", "Tornado Warning", "Flash Flood Warning", "Flash Flood Emergency", "Flood Advisory", "Snow Squall Warning", "Dust Storm Warning", "Blowing Dust Advisory", "Special Weather Statement", "Airport Weather Warning"];
+        const EXTREME_WARNINGS_LIST = [ "blizzard warning", "tornado warning", "severe thunderstorm warning", "ice storm warning", "snow squall warning", "extreme cold warning", "flash flood warning", "airport weather warning" ];
+
         const HAZARD_DETAILS = [
-            { id: 'Wind', icon: "ph-wind", prep: "Debris/high-profile vehicles" },
-            { id: 'Lightning', icon: "ph-lightning", prep: "Ramp/safety closure" },
-            { id: 'Hail', icon: "ph-cloud-snow", prep: "Asset damage" },
-            { id: 'Snow', icon: "ph-snowflake", prep: "Plow operations" },
-            { id: 'Visibility', icon: "ph-eye", prep: "Driver disorientation" },
-            { id: 'FZRA', icon: "ph-cloud-snow", timelineName: "FRZ RAIN", prep: "Chemical treatment" },
-            { id: 'FlashFreeze', icon: "ph-thermometer-cold", timelineName: "FLASH FRZ", prep: "Chemical treatment efficacy" },
-            { id: 'Rain', icon: "ph-drop", prep: "Drainage capacity" },
-            { id: 'Flooding', icon: "ph-waves", prep: "Drainage capacity" },
-            { id: 'Temp', icon: "ph-thermometer", prep: "Frostbite/safety" }
+            { id: 'Wind', icon: "ph-wind", name: "Wind", prep: "Debris/high-profile vehicles" },
+            { id: 'Lightning', icon: "ph-lightning", name: "Lightning", prep: "Ramp/safety closure" },
+            { id: 'Hail', icon: "ph-cloud-snow", name: "Hail", prep: "Asset damage" },
+            { id: 'Snow', icon: "ph-snowflake", name: "Snow", prep: "Plow operations" },
+            { id: 'Visibility', icon: "ph-eye", name: "Visibility", prep: "Driver disorientation" },
+            { id: 'FZRA', icon: "ph-cloud-snow", name: "Freezing Rain", timelineName: "FRZ RAIN", prep: "Chemical treatment" },
+            { id: 'FlashFreeze', icon: "ph-thermometer-cold", name: "Flash Freeze", timelineName: "FLASH FRZ", prep: "Chemical treatment efficacy" },
+            { id: 'Rain', icon: "ph-drop", name: "Rain", prep: "Drainage capacity" },
+            { id: 'Flooding', icon: "ph-waves", name: "Flooding", prep: "Drainage capacity" },
+            { id: 'Temp', icon: "ph-thermometer", name: "COLD/HEAT", prep: "Frostbite/safety" }
         ];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initDashboard();
+            setInterval(() => { initDashboard(); }, 5 * 60 * 1000);
+        });
 
         const tooltip = document.getElementById('global-tooltip');
         document.addEventListener('mousemove', (e) => {
-            if (tooltip.classList.contains('visible')) {
-                tooltip.style.left = `${e.clientX + 15}px`; tooltip.style.top = `${e.clientY + 15}px`;
+            if (tooltip && tooltip.classList.contains('visible')) {
+                let left = e.clientX + 15;
+                let top = e.clientY + 15;
+                if(left + 240 > window.innerWidth) left = e.clientX - 255;
+                if(top + 200 > window.innerHeight) top = e.clientY - 210;
+                tooltip.style.left = `${left}px`;
+                tooltip.style.top = `${top}px`;
             }
         });
-        function showTooltip(html) { tooltip.innerHTML = html; tooltip.classList.add('visible'); }
-        function hideTooltip() { tooltip.classList.remove('visible'); }
+        function showTooltip(html) { if(tooltip) { tooltip.innerHTML = html; tooltip.classList.add('visible'); } }
+        function hideTooltip() { if(tooltip) { tooltip.classList.remove('visible'); } }
 
         window.showHourTooltip = function(offset) {
             const d = new Date(globalNow.getTime() + offset * 3600000);
-            showTooltip(`<div class="font-bold border-b border-gray-600 mb-1 pb-1 text-center">TIME INSPECTION (+${offset}h)</div><div class="text-sm font-mono text-center text-white">${d.toLocaleString()}</div>`);
+            d.setMinutes(0); d.setSeconds(0); 
+            const local = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+            const zHour = d.getUTCHours().toString().padStart(2, '0');
+            const zMin = d.getUTCMinutes().toString().padStart(2, '0');
+            const html = `<div class="font-bold text-xs border-b border-gray-600 mb-1 pb-1 text-center">TIME INSPECTION (+${offset}h)</div><div class="text-sm font-mono text-center text-white">${local}</div><div class="text-xs text-gray-400 font-mono text-center mt-0.5">${zHour}:${zMin}Z</div>`;
+            showTooltip(html);
         };
 
         function getHazardTimeString(h_id, refsTimeline) {
             if (!refsTimeline) return "";
-            const mapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE', 'Flooding': 'RAIN' };
-            const tData = refsTimeline[mapping[h_id] || h_id.toUpperCase()];
-            let maxR = 0; for(let i=1; i<=48; i++) if(tData[i]?.risk > maxR) maxR = tData[i].risk;
-            if(maxR < 1) return ""; 
+            
+            const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE', 'Flooding': 'RAIN' };
+            const refKey = hazardMapping[h_id] || h_id.toUpperCase();
+            const tData = refsTimeline[refKey];
+            if(!tData) return "";
+
+            let maxRisk = 0;
+            for(let i=1; i<=TOTAL_HOURS; i++) {
+                if(tData[i] && tData[i].risk > maxRisk) maxRisk = tData[i].risk;
+            }
+            if(maxRisk < 1) return ""; 
+
             let start = -1, end = -1;
-            for(let i=1; i<=48; i++) if(tData[i]?.risk === maxR) { if(start === -1) start = i; end = i; }
-            const d1 = new Date(globalNow.getTime() + start * 3600000);
-            const d2 = new Date(globalNow.getTime() + end * 3600000);
-            const fmt = d => `${d.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase()} ${d.getHours() % 12 || 12}${d.getHours() >= 12 ? 'P' : 'A'}`;
-            return start === end ? fmt(d1) : `${fmt(d1)} - ${fmt(d2)}`;
+            for(let i=1; i<=TOTAL_HOURS; i++) {
+                if(tData[i] && tData[i].risk === maxRisk) {
+                    if(start === -1) start = i - 1;
+                    end = i - 1;
+                }
+            }
+            
+            const d1 = new Date(globalNow.getTime() + start*3600000);
+            const d2 = new Date(globalNow.getTime() + end*3600000);
+            
+            const day1 = d1.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
+            const h1 = d1.getHours(); const a1 = h1 >= 12 ? 'P' : 'A'; const hr1 = h1 % 12 || 12;
+            const day2 = d2.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
+            const h2 = d2.getHours(); const a2 = h2 >= 12 ? 'P' : 'A'; const hr2 = h2 % 12 || 12;
+
+            if(day1 === day2 && hr1 === hr2 && a1 === a2) return `${day1} ${hr1}${a1}`;
+            if(day1 === day2) return `${day1} ${hr1}${a1} - ${hr2}${a2}`;
+            return `${day1} ${hr1}${a1} - ${day2} ${hr2}${a2}`;
         }
 
+        function getAlertConfig(eventStr) {
+            const e = eventStr.toLowerCase();
+            let riskLevel = 0;
+            if (EXTREME_WARNINGS_LIST.some(w => e.includes(w))) riskLevel = 5; 
+            else if (e.includes("warning")) riskLevel = 4; 
+            else if (e.includes("advisory")) riskLevel = 3; 
+            else if (e.includes("watch")) riskLevel = 2; 
+            return RISK_LEVELS[riskLevel];
+        }
+
+        // --- DATA STATE ---
+        let liveMetar = null;
+        let liveAlerts = [];
+
+        function setStatus(msg, color) {
+            const el = document.getElementById('fetch-status');
+            if (el) { el.textContent = msg; el.style.color = color || '#facc15'; }
+        }
+
+        // --- FETCH METAR & ALERTS ---
         async function fetchMETAR() {
             try {
-                const resp = await fetch('https://api.weather.gov/stations/KRNO/observations/latest');
+                const resp = await fetch('https://api.weather.gov/stations/KRNO/observations/latest', {
+                    headers: { 'User-Agent': 'KRNO-DSS-Dashboard', 'Accept': 'application/geo+json' }
+                });
+                if (!resp.ok) throw new Error(`nws status ${resp.status}`);
                 const data = await resp.json();
                 const p = data.properties;
-                document.getElementById('w-spd').textContent = Math.round(p.windSpeed.value * 1.94);
-                document.getElementById('w-gst').textContent = p.windGust.value ? Math.round(p.windGust.value * 1.94) : '--';
-                document.getElementById('w-dir').textContent = p.windDirection.value + '°';
-                document.getElementById('wind-arrow').setAttribute('transform', `rotate(${p.windDirection.value}, 50, 50)`);
-                document.getElementById('t-val').textContent = Math.round(p.temperature.value * 9/5 + 32);
-                document.getElementById('d-val').textContent = Math.round(p.dewpoint.value * 9/5 + 32);
-                document.getElementById('metar-string').textContent = p.rawMessage;
-                document.getElementById('asos-time').textContent = 'UPDATED ' + new Date(p.timestamp).toLocaleTimeString();
-            } catch(e) {}
+                const msToKt = 1.94384;
+                const mToSm = 0.000621371;
+                liveMetar = {
+                    wdir: p.windDirection?.value ?? null,
+                    wspd: p.windSpeed?.value != null ? Math.round(p.windSpeed.value * msToKt) : 0,
+                    wgst: p.windGust?.value != null ? Math.round(p.windGust.value * msToKt) : 0,
+                    visib: p.visibility?.value != null ? Math.round(p.visibility.value * mToSm * 10) / 10 : 10,
+                    temp: p.temperature?.value ?? null,
+                    dewp: p.dewpoint?.value ?? null,
+                    clouds: (p.skyConditions || []).map(s => ({ cover: s.skyCover, base: s.cloudBase?.value != null ? Math.round(s.cloudBase.value * 3.28084) : null })).filter(s => s.cover && s.cover !== 'CLR' && s.cover !== 'SKC'),
+                    wxString: '',
+                    rawOb: p.rawMessage || '',
+                    reportTime: p.timestamp || null,
+                };
+                setStatus('✓ Source: api.weather.gov', '#22c55e');
+                applyMETARtoDisplay(liveMetar);
+            } catch(e) {
+                setStatus(`✗ METAR Fetch failed: ${e.message}`, '#f44336');
+            }
+        }
+
+        async function fetchAlerts() {
+            try {
+                const resp = await fetch('https://api.weather.gov/alerts/active?point=39.4986,-119.7681', {
+                    headers: { 'User-Agent': 'KRNO-DSS-Dashboard, nws.reno@noaa.gov' }
+                });
+                if (!resp.ok) throw new Error('Alerts fetch failed');
+                const data = await resp.json();
+                liveAlerts = (data.features || []).map(f => {
+                    const p = f.properties;
+                    const now = globalNow;
+                    const onset = p.onset ? new Date(p.onset) : now;
+                    const expires = p.expires ? new Date(p.expires) : new Date(now.getTime() + 3*3600000);
+                    const startHr = Math.max(0, (onset - now) / 3600000);
+                    const endHr = Math.min(TOTAL_HOURS, (expires - now) / 3600000);
+                    return { event: p.event || 'Unknown Alert', headline: p.headline || '', startHr: startHr, endHr: endHr > startHr ? endHr : startHr + 1 };
+                }).filter(a => a.endHr > 0);
+            } catch(e) { console.warn('Alerts fetch error:', e); }
+        }
+
+        function cToF(c) { return Math.round(c * 9/5 + 32); }
+
+        function getFlightCat(metar) {
+            const vis = parseFloat(metar.visib) || 10;
+            const skyCover = metar.clouds || [];
+            let ceiling = 99999;
+            for (const s of skyCover) {
+                if (['BKN','OVC','VV'].includes(s.cover) && s.base < ceiling) ceiling = s.base;
+            }
+            if (ceiling < 500 || vis < 1) return { cat: 'LIFR', color: '#ff00ff' };
+            if (ceiling < 1000 || vis < 3) return { cat: 'IFR', color: '#f44336' };
+            if (ceiling < 3000 || vis < 5) return { cat: 'MVFR', color: '#2196f3' };
+            return { cat: 'VFR', color: '#22c55e' };
+        }
+
+        function applyMETARtoDisplay(m) {
+            const wDir = m.wdir; const wSpd = m.wspd || 0; const wGst = m.wgst || 0;
+            const isCalm = wSpd === 0;
+            document.getElementById('w-spd').textContent = isCalm ? 'CALM' : wSpd;
+            document.getElementById('w-spd').style.color = isCalm ? '#71717a' : getColor('wind', wSpd);
+            document.getElementById('w-gst').textContent = wGst > 0 ? wGst : '--';
+            document.getElementById('w-gst').style.color = wGst > 0 ? getColor('wind', wGst) : '#71717a';
+            document.querySelector('.wind-dir-text').textContent = isCalm ? 'CALM' : `${wDir}°`;
+
+            const arrowGroup = document.getElementById('wind-arrow');
+            if (arrowGroup) {
+                if (isCalm) arrowGroup.style.opacity = '0.2';
+                else { arrowGroup.style.opacity = '1'; arrowGroup.setAttribute('transform', `rotate(${wDir}, 50, 50)`); }
+            }
+
+            const visEl = document.querySelector('.asos-box:nth-child(2) .asos-value');
+            if (visEl) {
+                const vis = m.visib || 10;
+                visEl.textContent = vis >= 10 ? '10+ SM' : `${vis} SM`;
+                visEl.style.color = vis < 1 ? '#f44336' : vis < 3 ? '#ff9800' : vis < 5 ? '#2196f3' : 'white';
+            }
+
+            const flightCat = getFlightCat(m);
+            const fcEl = document.querySelector('.flight-cat');
+            if (fcEl) { fcEl.textContent = flightCat.cat; fcEl.style.backgroundColor = flightCat.color; }
+
+            const tC = m.temp !== undefined ? m.temp : null;
+            const dC = m.dewp !== undefined ? m.dewp : null;
+            if (tC !== null) {
+                const tF = cToF(tC); const dF = dC !== null ? cToF(dC) : '--';
+                document.getElementById('t-val').textContent = tF;
+                document.getElementById('t-val').style.color = getColor('temp', tF);
+                document.getElementById('d-val').textContent = dF;
+                if (dC !== null) document.getElementById('d-val').style.color = getColor('dew', dF);
+            }
+
+            const metarEl = document.getElementById('metar-string');
+            if (metarEl) metarEl.textContent = m.rawOb || 'API PARSED ONLY (NO RAW MSG)';
+            
+            const dot = document.getElementById('live-dot');
+            const label = document.getElementById('live-label');
+            if (dot && label) { dot.style.background = '#22c55e'; label.textContent = 'METAR LIVE'; label.style.color = '#22c55e'; }
+        }
+
+        // --- GET REFS RISK LEVEL FROM TIMELINE JSON ---
+        function getRiskForVariable(id, i, refsTimeline) {
+            if (!refsTimeline) return 0; // Grey out if REFS failed
+            const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE', 'Flooding': 'RAIN' };
+            const refKey = hazardMapping[id] || id.toUpperCase();
+            
+            const hourData = refsTimeline[refKey];
+            if (!hourData) return 0;
+            
+            const fxx = i + 1; // loop is 0-47, backend keys are 1-48
+            if (hourData[fxx]) return hourData[fxx].risk;
+            return 0; 
+        }
+
+        function getHeaderDate(date) {
+            const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            let hours = date.getHours(); const ampm = hours >= 12 ? 'P' : 'A';
+            hours = hours % 12; hours = hours ? hours : 12; 
+            const min = date.getMinutes().toString().padStart(2, '0');
+            const localStr = `${hours}:${min}${ampm}`;
+            const tz = date.toLocaleTimeString('en-US',{timeZoneName:'short'}).split(' ').pop();
+            return `${dateStr} ${localStr} ${tz} | ${date.getUTCHours().toString().padStart(2, '0')}:${date.getUTCMinutes().toString().padStart(2, '0')}Z`;
+        }
+
+        function getHourLabel(date, offsetHours) {
+            const d = new Date(date.getTime() + offsetHours * 3600000);
+            let hours = d.getHours(); const ampm = hours >= 12 ? 'P' : 'A';
+            hours = hours % 12; hours = hours ? hours : 12;
+            const zulu = d.getUTCHours().toString().padStart(2,'0');
+            return `${hours}${ampm}/${zulu}Z`;
+        }
+
+        function renderWWA(now) {
+            const wwaContainer = document.getElementById('wwa-container');
+            const wwaTimeline = document.getElementById('wwa-timeline-bars');
+            const wwaBg = document.getElementById('wwa-bg');
+            const wwaLines = document.getElementById('wwa-lines');
+            const wwaAxis = document.getElementById('wwa-axis');
+
+            if(!wwaContainer) return; 
+
+            let alerts = liveAlerts.length > 0 ? liveAlerts : [];
+
+            alerts.forEach(a => { if (SHORT_FUSED_WARNINGS.some(s => a.event.includes(s))) a.startHr = Math.max(0, a.startHr); });
+            
+            let wwaTitle = "ACTIVE ALERTS";
+            const eventStr = alerts.map(a => a.event.toLowerCase()).join(' ');
+            if(eventStr.includes('warning')) { wwaTitle = "ACTIVE WARNINGS"; } 
+            else if(eventStr.includes('advisory')) { wwaTitle = "ACTIVE ADVISORIES"; } 
+            
+            const titleEl = document.getElementById('wwa-title-text');
+            if(titleEl) titleEl.textContent = alerts.length > 0 ? wwaTitle : "NO ACTIVE ALERTS";
+
+            wwaContainer.innerHTML = ''; wwaTimeline.innerHTML = ''; wwaBg.innerHTML = ''; wwaLines.innerHTML = ''; wwaAxis.innerHTML = '';
+
+            for(let i=0; i<TOTAL_HOURS; i++) {
+                const isDay = (new Date(now.getTime() + i*3600000).getHours() >= 6 && new Date(now.getTime() + i*3600000).getHours() < 18);
+                const classStr = isDay ? 'day-segment' : 'night-segment';
+                const width = 100 / TOTAL_HOURS;
+                wwaBg.innerHTML += `<div class="${classStr}" style="width: ${width}%;" onmouseenter="showHourTooltip(${i})" onmouseleave="hideTooltip()"></div>`;
+                if (new Date(now.getTime() + i*3600000).getHours() === 0) {
+                    const leftPos = (i / TOTAL_HOURS) * 100;
+                    const dayName = new Date(now.getTime() + i*3600000).toLocaleDateString('en-US', { weekday: 'short' });
+                    wwaLines.innerHTML += `<div class="midnight-line" style="left: ${leftPos}%;"><div class="midnight-label">${dayName}</div></div>`;
+                }
+            }
+
+            alerts.forEach((alert, index) => {
+                const config = getAlertConfig(alert.event);
+                const flashClass = alert.event.includes("Airport Weather Warning") ? "animate-flash" : "";
+                const startTimeLabel = getSimpleTime(now, alert.startHr);
+                const endTimeLabel = getSimpleTime(now, alert.endHr);
+
+                const listItem = document.createElement('div');
+                listItem.className = `wwa-item py-2 px-3 rounded-sm text-sm mb-2 flex justify-between items-center border-l-4 ${flashClass}`;
+                listItem.style.backgroundColor = '#27272a'; listItem.style.borderLeftColor = config.color; listItem.style.color = '#e4e4e7';
+                listItem.innerHTML = `<span class="font-bold tracking-wide uppercase">${alert.event}</span><span class="font-mono text-xs opacity-70">+${Math.round(alert.startHr)}h</span>`;
+                
+                const tHtml = `<div class="font-bold text-xs mb-1 text-white uppercase border-b border-gray-600 pb-1">${alert.event}</div><div class="text-[10px] text-gray-300 font-mono mb-1">Valid: ${startTimeLabel} - ${endTimeLabel}</div><div class="text-[9px] text-gray-400 italic leading-tight">${alert.headline}</div>`;
+                
+                listItem.addEventListener('mouseenter', () => showTooltip(tHtml));
+                listItem.addEventListener('mouseleave', hideTooltip);
+                wwaContainer.appendChild(listItem);
+
+                const width = ((alert.endHr - alert.startHr) / TOTAL_HOURS) * 100;
+                const left = (alert.startHr / TOTAL_HOURS) * 100;
+                const top = index * 33; 
+                
+                const bar = document.createElement('div');
+                bar.className = `warning-block ${flashClass}`;
+                bar.style.backgroundColor = config.color; bar.style.left = `${left}%`; bar.style.width = `${width}%`; bar.style.top = `${top}%`; bar.style.height = `30%`; bar.style.color = config.textColor; 
+                bar.innerHTML = `<span class="px-1 truncate font-mono">${alert.event.toUpperCase()} (${startTimeLabel}-${endTimeLabel})</span>`;
+                
+                bar.addEventListener('mouseenter', () => showTooltip(tHtml));
+                bar.addEventListener('mouseleave', hideTooltip);
+                wwaTimeline.appendChild(bar);
+            });
+
+            for(let i=0; i<=TOTAL_HOURS; i+=6) {
+                const leftPos = (i / TOTAL_HOURS) * 100;
+                let topLabel = i === 0 ? 'Now' : `+${i}h`;
+                let timeLabel = getHourLabel(now, i);
+                let alignClass = i===0 ? '' : (i===TOTAL_HOURS ? 'transform -translate-x-full' : 'transform -translate-x-1/2');
+                wwaAxis.innerHTML += `
+                    <div class="absolute top-0 ${alignClass} text-center" style="left: ${leftPos}%">
+                        <div class="font-bold text-slate-400">${topLabel}</div>
+                        <div class="text-[10px] text-slate-500 font-mono mt-0.5 leading-none font-bold">${timeLabel}</div>
+                    </div>`;
+            }
+        }
+
+        function getSimpleTime(startDate, offsetHours) {
+            const d = new Date(startDate.getTime() + offsetHours * 3600000);
+            let hours = d.getHours(); const ampm = hours >= 12 ? 'P' : 'A';
+            hours = hours % 12; hours = hours ? hours : 12;
+            return `${hours}${ampm}`;
         }
 
         async function initDashboard() {
-            globalNow = new Date();
-            document.getElementById('timestamp2').textContent = globalNow.toLocaleString();
-            fetchMETAR();
-            
-            const fetchOpts = { headers: { "ngrok-skip-browser-warning": "true" } };
             try {
-                const [threatsR, timelineR] = await Promise.all([
+                globalNow = new Date();
+                const timeEl = document.getElementById('timestamp2');
+                if(timeEl) timeEl.textContent = getHeaderDate(globalNow);
+
+                // --- FETCH LIVE DATA (WITH NGROK BYPASS HEADER) ---
+                const fetchOpts = { headers: { "ngrok-skip-browser-warning": "true" } };
+                
+                const [metarResp, alertsResp, threatsResp, timelineResp] = await Promise.allSettled([
+                    fetchMETAR(), 
+                    fetchAlerts(),
                     fetch(`${BACKEND_URL}/api/threats`, fetchOpts).then(r => r.json()),
                     fetch(`${BACKEND_URL}/api/timeline`, fetchOpts).then(r => r.json())
                 ]);
 
-                const refsThreats = threatsR.threats;
-                const refsTimeline = timelineR.timeline;
+                let refsThreats = null;
+                let refsTimeline = null;
+                
+                if (threatsResp.status === 'fulfilled' && threatsResp.value.threats) {
+                    refsThreats = threatsResp.value.threats;
+                }
+                if (timelineResp.status === 'fulfilled' && timelineResp.value.timeline) {
+                    refsTimeline = timelineResp.value.timeline;
+                }
+
+                if (!liveMetar) {
+                    const metarEl = document.getElementById('metar-string');
+                    if(metarEl) metarEl.textContent = 'AWAITING METAR...';
+                }
+
+                // --- MATRIX ---
                 const grid = document.getElementById('hazards-grid');
-                grid.innerHTML = '';
+                if(grid) {
+                    grid.innerHTML = '';
+                    
+                    const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE', 'Flooding': 'RAIN' };
 
-                const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE', 'Flooding': 'RAIN' };
-                const hazards = HAZARD_DETAILS.map(h => {
-                    const key = hazardMapping[h.id] || h.id.toUpperCase();
-                    return { ...h, prob: refsThreats[key]?.prob || 0, risk: refsThreats[key]?.risk || 0, metric: refsThreats[key]?.metric || 'None', label: refsThreats[key]?.name || h.id };
-                }).sort((a,b) => b.risk - a.risk || b.prob - a.prob);
+                    const hazards = HAZARD_DETAILS.map(h => {
+                        let prob = 0;
+                        let risk = 0;
+                        const refKey = hazardMapping[h.id] || h.id.toUpperCase();
+                        
+                        if (refsThreats && refsThreats[refKey]) {
+                            prob = refsThreats[refKey].prob;
+                            risk = refsThreats[refKey].risk;
+                        }
+                        return { ...h, prob, risk }; 
+                    });
 
-                hazards.forEach(h => {
-                    const config = RISK_LEVELS[h.risk];
-                    const card = document.createElement('div');
-                    card.className = 'ops-card flex flex-col justify-between p-3';
-                    card.style.borderTop = `4px solid ${config.color}`;
-                    card.innerHTML = `
-                        <div class="hazard-val" style="color:${h.risk === 0 ? '#52525b' : '#fff'}">${h.prob}<span class="percent-sign">%</span></div>
-                        <div class="mt-1"><div class="hazard-label">${h.label}</div><div class="hazard-criteria">${h.metric}</div>
-                        <div class="hazard-time" style="color:${config.color}">${getHazardTimeString(h.id, refsTimeline)}</div></div>
-                        <i class="ph ${h.icon} watermark-icon" style="color:${config.color}"></i>`;
-                    grid.appendChild(card);
-                });
+                    hazards.sort((a, b) => {
+                        if (b.risk !== a.risk) return b.risk - a.risk; 
+                        return b.prob - a.prob; 
+                    });
 
-                // Timeline
-                const barsCtx = document.getElementById('timeline-bars');
+                    hazards.forEach(h => {
+                        const isGrey = h.risk === 0;
+                        const r = h.risk;
+                        const config = RISK_LEVELS[r];
+                        
+                        const borderColor = config.color;
+                        const valColor = isGrey ? '#52525b' : '#ffffff'; 
+                        const displayVal = `${h.prob}`;
+                        
+                        const refKey = hazardMapping[h.id] || h.id.toUpperCase();
+                        
+                        // ✨ THIS IS THE MAGIC LINE: ZERO HARDCODING ✨
+                        const displayMetric = (refsThreats && refsThreats[refKey]) ? refsThreats[refKey].metric : 'None';
+                        
+                        const timeString = getHazardTimeString(h.id, refsTimeline);
+
+                        const card = document.createElement('div');
+                        card.className = 'ops-card flex flex-col justify-between p-3';
+                        card.style.borderTop = `4px solid ${borderColor}`;
+                        card.innerHTML = `
+                            <div class="flex justify-between items-start z-10"><div class="hazard-val" style="color:${valColor}">${displayVal}<span class="percent-sign">%</span></div></div>
+                            <div class="z-10 mt-1">
+                                <div class="hazard-label">${h.name}</div>
+                                <div class="hazard-criteria">${displayMetric}</div>
+                                <div class="hazard-time" style="color: ${isGrey ? 'transparent' : config.color}">${timeString}</div>
+                            </div>
+                            <i class="ph ${h.icon} watermark-icon" style="color: ${borderColor};"></i>
+                        `;
+                        
+                        const tHtml = `
+                            <div class="flex justify-between border-b border-gray-700 pb-1 mb-2">
+                                <span class="font-bold uppercase text-gray-400">${h.name}</span>
+                                <span class="font-mono text-${config.name === 'None' ? 'gray-500' : 'white'}">${displayVal}% Prob</span>
+                            </div>
+                            <div class="mb-2">
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded" style="background-color: ${config.color}; color: ${config.textColor}">STATUS: ${config.name.toUpperCase()} THREAT</span>
+                            </div>
+                            <div class="text-[10px] italic text-gray-400 bg-gray-800 p-1 rounded mb-1">Threshold: ${displayMetric}</div>
+                            ${h.risk >= 1 ? `<div class="mt-1 text-[10px] text-gray-300 border-t border-gray-700 pt-1"><span class="font-bold text-gray-500 uppercase">Action:</span> ${h.prep}</div>` : ''}
+                        `;
+                        card.addEventListener('mouseenter', () => showTooltip(tHtml));
+                        card.addEventListener('mouseleave', hideTooltip);
+                        grid.appendChild(card);
+                    });
+                }
+
+                // --- TIMELINE ---
                 const labelsCtx = document.getElementById('timeline-labels');
-                barsCtx.innerHTML = ''; labelsCtx.innerHTML = '';
-                HAZARD_DETAILS.forEach(h => {
-                    labelsCtx.innerHTML += `<div class="h-full flex items-center justify-end text-[10px] font-bold text-slate-400 uppercase tracking-tighter">${h.timelineName || h.id}</div>`;
-                    let row = `<div class="timeline-row"><div class="horizontal-guide"></div><div class="bar-container">`;
-                    for(let i=1; i<=48; i++) {
-                        const r = refsTimeline[hazardMapping[h.id] || h.id.toUpperCase()][i].risk;
-                        row += `<div class="timeline-block" style="left:${(i-1)/48*100}%; width:${100/48}%; background-color:${RISK_LEVELS[r].color}"></div>`;
-                    }
-                    barsCtx.innerHTML += row + `</div></div>`;
-                });
-            } catch(e) { console.error(e); }
-        }
+                const barsCtx = document.getElementById('timeline-bars');
+                const bgCtx = document.getElementById('timeline-bg');
+                const linesCtx = document.getElementById('timeline-lines');
+                const axisCtx = document.getElementById('timeline-axis');
+                
+                if(labelsCtx) {
+                    labelsCtx.innerHTML = ''; barsCtx.innerHTML = ''; bgCtx.innerHTML = ''; linesCtx.innerHTML = ''; axisCtx.innerHTML = '';
 
-        initDashboard();
-        setInterval(initDashboard, 300000);
+                    for(let i=0; i<TOTAL_HOURS; i++) {
+                        const isDay = (new Date(globalNow.getTime() + i*3600000).getHours() >= 6 && new Date(globalNow.getTime() + i*3600000).getHours() < 18);
+                        const classStr = isDay ? 'day-segment' : 'night-segment';
+                        const width = 100 / TOTAL_HOURS;
+                        bgCtx.innerHTML += `<div class="${classStr}" style="width: ${width}%;" onmouseenter="showHourTooltip(${i})" onmouseleave="hideTooltip()"></div>`;
+                        if (new Date(globalNow.getTime() + i*3600000).getHours() === 0) {
+                            const leftPos = (i / TOTAL_HOURS) * 100;
+                            const dayName = new Date(globalNow.getTime() + i*3600000).toLocaleDateString('en-US', { weekday: 'short' });
+                            linesCtx.innerHTML += `<div class="midnight-line" style="left: ${leftPos}%;"><div class="midnight-label">${dayName}</div></div>`;
+                        }
+                    }
+
+                    for(let i=0; i<=TOTAL_HOURS; i+=6) {
+                        const leftPos = (i / TOTAL_HOURS) * 100;
+                        let topLabel = i === 0 ? 'Now' : `+${i}h`;
+                        let timeLabel = getHourLabel(globalNow, i);
+                        let alignClass = i===0 ? '' : (i===TOTAL_HOURS ? 'transform -translate-x-full' : 'transform -translate-x-1/2');
+                        axisCtx.innerHTML += `
+                            <div class="absolute top-0 ${alignClass} text-center" style="left: ${leftPos}%">
+                                <div class="font-bold text-slate-400">${topLabel}</div>
+                                <div class="text-[10px] text-slate-500 font-mono mt-0.5 leading-none font-bold">${timeLabel}</div>
+                            </div>`;
+                    }
+
+                    HAZARD_DETAILS.forEach(h => {
+                        const axisLabel = h.timelineName || h.name;
+                        labelsCtx.innerHTML += `<div class="h-full flex items-center justify-end text-xs font-bold text-slate-400 uppercase tracking-widest">${axisLabel}</div>`;
+                        
+                        let rowHtml = `<div class="timeline-row">
+                            <div class="horizontal-guide"></div>
+                            <div class="bar-container">`;
+                        
+                        for (let i = 0; i < TOTAL_HOURS; i++) {
+                            const risk = getRiskForVariable(h.id, i, refsTimeline);
+                            const safeRisk = risk || 0;
+                            const config = RISK_LEVELS[safeRisk] || RISK_LEVELS[0];
+                            const width = 100 / TOTAL_HOURS;
+                            const left = (i / TOTAL_HOURS) * 100;
+                            rowHtml += `<div class="timeline-block" style="left: ${left}%; width: ${width}%; background-color: ${config.color};"></div>`;
+                        }
+
+                        rowHtml += `</div></div>`;
+                        barsCtx.innerHTML += rowHtml;
+                    });
+                }
+
+                renderWWA(globalNow);
+
+            } catch(e) {
+                console.error("Dashboard Render Failed", e);
+            }
+        }
     </script>
 </body>
 </html>
