@@ -25,16 +25,6 @@
         .hazard-time { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; margin-top: 4px; z-index: 10; position: relative; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
         .watermark-icon { position: absolute; right: -8px; bottom: -8px; font-size: 4rem; opacity: 0.12; transform: rotate(-10deg); z-index: 0; pointer-events: none; }
 
-        /* BUTTONS & UI */
-        .sim-btn {
-            background: #27272a; border: 1px solid #3f3f46; color: #a1a1aa;
-            padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold;
-            text-transform: uppercase; cursor: pointer; transition: all 0.2s;
-            display: flex; align-items: center; gap: 4px;
-        }
-        .sim-btn:hover { background: #3f3f46; color: white; border-color: #52525b; }
-        .sim-btn.active { background: #7c2d12; border-color: #ef4444; color: #fca5a5; }
-
         /* TOOLTIP */
         #global-tooltip {
             position: fixed; top: 0; left: 0; width: 260px;
@@ -247,9 +237,6 @@
         <div class="panel p-4 flex flex-col" style="z-index: 20;">
             <div class="flex justify-between items-center mb-2">
                 <h2 id="wwa-title-text" class="font-bold text-base tracking-wider uppercase text-slate-300">Active Advisories</h2>
-                <button id="aww-toggle" class="sim-btn" onclick="toggleAWW()">
-                    <i class="ph-bold ph-lightning"></i> Trigger AWW
-                </button>
             </div>
             
             <div class="h-24 border-b border-[#27272a] pb-3 mb-2 relative flex-shrink-0 flex">
@@ -273,7 +260,6 @@
 
         const TOTAL_HOURS = 48; 
         let globalNow = new Date(); 
-        let isAWWActive = true; 
 
         // --- CUSTOM COLOR SCALES ---
         const COLOR_SCALES = {
@@ -305,16 +291,16 @@
         const EXTREME_WARNINGS_LIST = [ "blizzard warning", "tornado warning", "severe thunderstorm warning", "ice storm warning", "snow squall warning", "extreme cold warning", "flash flood warning", "airport weather warning" ];
 
         const HAZARD_DETAILS = [
-            { id: 'Wind', icon: "ph-wind", name: "Wind", metric: "58-65 mph", prep: "Debris/high-profile vehicles", winterPriority: 2 },
-            { id: 'Lightning', icon: "ph-lightning", name: "Lightning", metric: "<5%", prep: "Ramp/safety closure", winterPriority: 8 },
-            { id: 'Hail', icon: "ph-cloud-snow", name: "Hail", metric: "None", prep: "Asset damage", winterPriority: 9 },
-            { id: 'Snow', icon: "ph-snowflake", name: "Snow", metric: "1-2\"/hr", prep: "Plow operations", winterPriority: 2 },
-            { id: 'Visibility', icon: "ph-eye", name: "Visibility", metric: "0.50-1 SM", prep: "Driver disorientation", winterPriority: 4 },
-            { id: 'FZRA', icon: "ph-cloud-snow", name: "Freezing Rain", timelineName: "FRZ RAIN", metric: "None", prep: "Chemical treatment", winterPriority: 3 },
-            { id: 'FlashFreeze', icon: "ph-thermometer-cold", name: "Flash Freeze", timelineName: "FLASH FRZ", metric: "Wet + <25°F Tw", prep: "Chemical treatment efficacy", winterPriority: 1 },
-            { id: 'Rain', icon: "ph-drop", name: "Rain", metric: "<0.10\"/hr", prep: "Drainage capacity", winterPriority: 6 },
-            { id: 'Flooding', icon: "ph-waves", name: "Flooding", metric: "None", prep: "Drainage capacity", winterPriority: 7 },
-            { id: 'Temp', icon: "ph-thermometer", name: "COLD/HEAT", metric: "20-32°F", prep: "Frostbite/safety", winterPriority: 5 }
+            { id: 'Wind', icon: "ph-wind", name: "Wind", prep: "Debris/high-profile vehicles" },
+            { id: 'Lightning', icon: "ph-lightning", name: "Lightning", prep: "Ramp/safety closure" },
+            { id: 'Hail', icon: "ph-cloud-snow", name: "Hail", prep: "Asset damage" },
+            { id: 'Snow', icon: "ph-snowflake", name: "Snow", prep: "Plow operations" },
+            { id: 'Visibility', icon: "ph-eye", name: "Visibility", prep: "Driver disorientation" },
+            { id: 'FZRA', icon: "ph-cloud-snow", name: "Freezing Rain", timelineName: "FRZ RAIN", prep: "Chemical treatment" },
+            { id: 'FlashFreeze', icon: "ph-thermometer-cold", name: "Flash Freeze", timelineName: "FLASH FRZ", prep: "Chemical treatment efficacy" },
+            { id: 'Rain', icon: "ph-drop", name: "Rain", prep: "Drainage capacity" },
+            { id: 'Flooding', icon: "ph-waves", name: "Flooding", prep: "Drainage capacity" },
+            { id: 'Temp', icon: "ph-thermometer", name: "COLD/HEAT", prep: "Frostbite/safety" }
         ];
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -540,13 +526,6 @@
             return `${hours}${ampm}/${zulu}Z`;
         }
 
-        window.toggleAWW = function() {
-            isAWWActive = !isAWWActive;
-            renderWWA(globalNow);
-            const btn = document.getElementById('aww-toggle');
-            if(btn) { if(isAWWActive) btn.classList.add('active'); else btn.classList.remove('active'); }
-        }
-
         function renderWWA(now) {
             const wwaContainer = document.getElementById('wwa-container');
             const wwaTimeline = document.getElementById('wwa-timeline-bars');
@@ -557,10 +536,6 @@
             if(!wwaContainer) return; 
 
             let alerts = liveAlerts.length > 0 ? liveAlerts : [];
-            if(isAWWActive) {
-                const hasAWW = alerts.some(a => a.event.includes("Airport Weather Warning"));
-                if(!hasAWW) alerts.unshift({ event: "Airport Weather Warning", startHr: 0, endHr: 1 });
-            }
 
             alerts.forEach(a => { if (SHORT_FUSED_WARNINGS.some(s => a.event.includes(s))) a.startHr = Math.max(0, a.startHr); });
             
@@ -570,7 +545,7 @@
             else if(eventStr.includes('advisory')) { wwaTitle = "ACTIVE ADVISORIES"; } 
             
             const titleEl = document.getElementById('wwa-title-text');
-            if(titleEl) titleEl.textContent = wwaTitle;
+            if(titleEl) titleEl.textContent = alerts.length > 0 ? wwaTitle : "NO ACTIVE ALERTS";
 
             wwaContainer.innerHTML = ''; wwaTimeline.innerHTML = ''; wwaBg.innerHTML = ''; wwaLines.innerHTML = ''; wwaAxis.innerHTML = '';
 
@@ -643,15 +618,16 @@
                 const timeEl = document.getElementById('timestamp2');
                 if(timeEl) timeEl.textContent = getHeaderDate(globalNow);
 
-                // --- FETCH LIVE DATA: METAR, Alerts, AND REFS ---
+                // --- FETCH LIVE DATA (WITH NGROK BYPASS HEADER) ---
+                const fetchOpts = { headers: { "ngrok-skip-browser-warning": "true" } };
+                
                 const [metarResp, alertsResp, threatsResp, timelineResp] = await Promise.allSettled([
                     fetchMETAR(), 
                     fetchAlerts(),
-                    fetch(`${BACKEND_URL}/api/threats`).then(r => r.json()),
-                    fetch(`${BACKEND_URL}/api/timeline`).then(r => r.json())
+                    fetch(`${BACKEND_URL}/api/threats`, fetchOpts).then(r => r.json()),
+                    fetch(`${BACKEND_URL}/api/timeline`, fetchOpts).then(r => r.json())
                 ]);
 
-                // Extract REFS data
                 let refsThreats = null;
                 let refsTimeline = null;
                 
@@ -662,7 +638,6 @@
                     refsTimeline = timelineResp.value.timeline;
                 }
 
-                // If fallback METAR didn't populate
                 if (!liveMetar) {
                     const metarEl = document.getElementById('metar-string');
                     if(metarEl) metarEl.textContent = 'AWAITING METAR...';
@@ -675,7 +650,6 @@
                     
                     const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE', 'Flooding': 'RAIN' };
 
-                    // OVERRIDE WITH LIVE REFS PROBABILITIES
                     const hazards = HAZARD_DETAILS.map(h => {
                         let prob = 0;
                         let risk = 0;
@@ -701,7 +675,12 @@
                         const borderColor = config.color;
                         const valColor = isGrey ? '#52525b' : '#ffffff'; 
                         const displayVal = `${h.prob}`;
-                        const displayMetric = h.metric || '--';
+                        
+                        const refKey = hazardMapping[h.id] || h.id.toUpperCase();
+                        
+                        // ✨ THIS IS THE MAGIC LINE: ZERO HARDCODING ✨
+                        const displayMetric = (refsThreats && refsThreats[refKey]) ? refsThreats[refKey].metric : 'None';
+                        
                         const timeString = getHazardTimeString(h.id, refsTimeline);
 
                         const card = document.createElement('div');
@@ -776,7 +755,6 @@
                             <div class="horizontal-guide"></div>
                             <div class="bar-container">`;
                         
-                        // Pass refsTimeline into getRiskForVariable to draw the exact data points!
                         for (let i = 0; i < TOTAL_HOURS; i++) {
                             const risk = getRiskForVariable(h.id, i, refsTimeline);
                             const safeRisk = risk || 0;
