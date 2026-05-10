@@ -173,7 +173,7 @@
                     
                     <div class="asos-box relative">
                         <div class="asos-label absolute top-2 left-2">WIND</div>
-                        <div class="threat-badge threat-minor">X-WIND</div>
+                        <div class="threat-badge threat-minor" id="xwind-badge" style="display:none">X-WIND OK</div>
                         
                         <div class="wind-wrapper pt-3">
                             <svg class="wind-rose-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
@@ -255,19 +255,14 @@
     </div>
 
     <script>
-        // --- BACKEND URL (loaded from config.json — updated automatically by Colab) ---
+        // --- BACKEND URL (auto-loaded from config.json, updated by Colab Cell 6b) ---
         let BACKEND_URL = "";
-
         async function loadConfig() {
             try {
                 const r = await fetch('./config.json?t=' + Date.now());
                 const cfg = await r.json();
                 BACKEND_URL = cfg.backend_url || "";
-                console.log('Backend URL loaded:', BACKEND_URL);
-            } catch(e) {
-                console.warn('config.json not found — REFS data unavailable');
-                BACKEND_URL = "";
-            }
+            } catch(e) { BACKEND_URL = ""; }
         }
 
         const TOTAL_HOURS = 48; 
@@ -401,27 +396,38 @@
         // --- FETCH METAR & ALERTS ---
         async function fetchMETAR() {
             try {
-                const resp = await fetch('https://api.weather.gov/stations/KRNO/observations/latest', {
+                // Fetch raw METAR string from aviationweather.gov (CORS-enabled)
+                const rawResp = await fetch('https://aviationweather.gov/api/data/metar?ids=KRNO&format=raw', {
+                    headers: { 'Accept': 'text/plain' }
+                });
+                const rawText = rawResp.ok ? (await rawResp.text()).trim() : '';
+
+                // Fetch parsed data from api.weather.gov
+                const parsedResp = await fetch('https://api.weather.gov/stations/KRNO/observations/latest', {
                     headers: { 'User-Agent': 'KRNO-DSS-Dashboard', 'Accept': 'application/geo+json' }
                 });
-                if (!resp.ok) throw new Error(`nws status ${resp.status}`);
-                const data = await resp.json();
+                if (!parsedResp.ok) throw new Error(`NWS status ${parsedResp.status}`);
+                const data = await parsedResp.json();
                 const p = data.properties;
                 const msToKt = 1.94384;
                 const mToSm = 0.000621371;
+
                 liveMetar = {
-                    wdir: p.windDirection?.value ?? null,
-                    wspd: p.windSpeed?.value != null ? Math.round(p.windSpeed.value * msToKt) : 0,
-                    wgst: p.windGust?.value != null ? Math.round(p.windGust.value * msToKt) : 0,
+                    wdir:  p.windDirection?.value ?? null,
+                    wspd:  p.windSpeed?.value != null ? Math.round(p.windSpeed.value * msToKt) : 0,
+                    wgst:  p.windGust?.value != null ? Math.round(p.windGust.value * msToKt) : 0,
                     visib: p.visibility?.value != null ? Math.round(p.visibility.value * mToSm * 10) / 10 : 10,
-                    temp: p.temperature?.value ?? null,
-                    dewp: p.dewpoint?.value ?? null,
-                    clouds: (p.skyConditions || []).map(s => ({ cover: s.skyCover, base: s.cloudBase?.value != null ? Math.round(s.cloudBase.value * 3.28084) : null })).filter(s => s.cover && s.cover !== 'CLR' && s.cover !== 'SKC'),
+                    temp:  p.temperature?.value ?? null,
+                    dewp:  p.dewpoint?.value ?? null,
+                    clouds: (p.skyConditions || []).map(s => ({
+                        cover: s.skyCover,
+                        base: s.cloudBase?.value != null ? Math.round(s.cloudBase.value * 3.28084) : null
+                    })).filter(s => s.cover && s.cover !== 'CLR' && s.cover !== 'SKC'),
                     wxString: '',
-                    rawOb: p.rawMessage || '',
+                    rawOb: rawText || p.rawMessage || '',
                     reportTime: p.timestamp || null,
                 };
-                setStatus('✓ Source: api.weather.gov', '#22c55e');
+                setStatus('✓ Source: aviationweather.gov + api.weather.gov', '#22c55e');
                 applyMETARtoDisplay(liveMetar);
             } catch(e) {
                 setStatus(`✗ METAR Fetch failed: ${e.message}`, '#f44336');
@@ -462,6 +468,34 @@
             return { cat: 'VFR', color: '#22c55e' };
         }
 
+        function getKRNOCrosswind(wDir, wSpd, wGst) {
+            // Primary runway: 16R/34L (heading 160/340) — main ops at KRNO
+            // Uses gust speed when available — conservative/worst case
+            if (wDir === null || wSpd === 0) return { xw: 0, label: 'HEADWIND', color: '#22c55e' };
+            const effectiveSpd = (wGst && wGst > wSpd) ? wGst : wSpd;
+            const diff = ((wDir - 160) + 360) % 360;
+            const xw   = Math.round(Math.abs(effectiveSpd * Math.sin(diff * Math.PI / 180)));
+            const gustFlag = (wGst && wGst > wSpd) ? 'G' : '';
+
+            // Three categories: Light / Medium / Heavy aircraft
+            // Light  (C172, PA28):              limit ~15 kt
+            // Medium (CRJ-200, E175, turboprop): limit ~27 kt
+            // Heavy  (B737, A320, B757, MD-10):  limit ~33 kt
+            let label, color;
+            if (xw >= 33) {
+                label = `X-${xw}${gustFlag}KT HEAVY`;   color = '#ef4444'; // Red
+            } else if (xw >= 27) {
+                label = `X-${xw}${gustFlag}KT MEDIUM`;  color = '#f97316'; // Orange
+            } else if (xw >= 15) {
+                label = `X-${xw}${gustFlag}KT LIGHT`;   color = '#eab308'; // Yellow
+            } else if (xw > 0) {
+                label = `X-${xw}${gustFlag}KT`;         color = '#6b7280'; // Gray — no concern
+            } else {
+                label = 'HEADWIND';                      color = '#22c55e'; // Green
+            }
+            return { xw, label, color };
+        }
+
         function applyMETARtoDisplay(m) {
             const wDir = m.wdir; const wSpd = m.wspd || 0; const wGst = m.wgst || 0;
             const isCalm = wSpd === 0;
@@ -475,6 +509,20 @@
             if (arrowGroup) {
                 if (isCalm) arrowGroup.style.opacity = '0.2';
                 else { arrowGroup.style.opacity = '1'; arrowGroup.setAttribute('transform', `rotate(${wDir}, 50, 50)`); }
+            }
+
+            // Crosswind badge — best runway at KRNO
+            const xwBadge = document.getElementById('xwind-badge');
+            if (xwBadge) {
+                const xw = getKRNOCrosswind(wDir, wSpd, wGst);
+                if (!isCalm) {
+                    xwBadge.style.display = 'block';
+                    xwBadge.textContent = xw.label;
+                    xwBadge.style.backgroundColor = xw.color;
+                    xwBadge.style.color = 'white';
+                } else {
+                    xwBadge.style.display = 'none';
+                }
             }
 
             const visEl = document.querySelector('.asos-box:nth-child(2) .asos-value');
