@@ -491,40 +491,51 @@
                     } catch(e) { continue; }
                 }
 
-                // Step 2: Parse ALL fields from raw METAR (most reliable)
-                let wdir = null, wspd = 0, wgst = 0, visib = 10;
-                let tempC = null, dewC = null, clouds = [], wxString = '';
-
+                // Step 2: Parse ALL fields from raw METAR (split by space — no regex escape issues)
                 if (rawText) {
-                    // Wind: 26005KT or 26005G12KT or VRB04KT or 00000KT
-                    const wm = rawText.match(/(VRB|\d{3})(\d{2,3})(G(\d{2,3}))?KT/);
-                    if (wm) {
-                        wdir = wm[1] === 'VRB' ? null : parseInt(wm[1]);
-                        wspd = parseInt(wm[2]);
-                        wgst = wm[4] ? parseInt(wm[4]) : 0;
+                    const tokens = rawText.split(' ');
+                    for (const tok of tokens) {
+                        // Wind: 26005KT or 26005G12KT or VRB04KT or 00000KT
+                        if (tok.endsWith('KT') && !tok.includes('/')) {
+                            const g = tok.indexOf('G');
+                            const spd = g > 0 ? tok.slice(3, g) : tok.slice(3, tok.length - 2);
+                            wdir = tok.startsWith('VRB') ? null : parseInt(tok.slice(0, 3));
+                            wspd = parseInt(spd) || 0;
+                            wgst = g > 0 ? parseInt(tok.slice(g + 1, tok.length - 2)) : 0;
+                        }
+                        // Visibility: 10SM 1SM 1/2SM etc
+                        if (tok.endsWith('SM') && !tok.startsWith('M') && tok.indexOf('/') < 0) {
+                            visib = Math.min(parseInt(tok) || 10, 10);
+                        }
+                        if (tok.endsWith('SM') && tok.indexOf('/') > 0) {
+                            const p = tok.replace('SM','').split('/');
+                            visib = parseFloat(p[0]) / parseFloat(p[1]);
+                        }
+                        // Clouds: FEW250 SCT020 BKN045 OVC010
+                        if (/^(FEW|SCT|BKN|OVC)[0-9]{3}/.test(tok)) {
+                            clouds.push({ cover: tok.slice(0,3), base: parseInt(tok.slice(3,6)) * 100 });
+                        }
+                        // Temp/dew: 16/M03 or M02/M08 or 15/09
+                        // Token contains exactly one slash and matches temp/dew pattern
+                        if (tok.indexOf('/') === (tok.startsWith('M') ? 3 : 2)) {
+                            const slash = tok.indexOf('/');
+                            const tStr = tok.slice(0, slash);
+                            const dStr = tok.slice(slash + 1);
+                            const validT = /^M?[0-9]{2}$/.test(tStr);
+                            const validD = /^M?[0-9]{2}$/.test(dStr);
+                            if (validT && validD) {
+                                const pt = s => s.startsWith('M') ? -parseInt(s.slice(1)) : parseInt(s);
+                                tempC = pt(tStr);
+                                dewC  = pt(dStr);
+                            }
+                        }
+                        // Present weather codes
+                        if (['TS','RA','SN','FG','BR','HZ','DZ','GR','GS','PL',
+                             '+RA','+SN','-RA','-SN','RASN','FZRA','FZDZ','BLSN',
+                             'TSRA','TSGR'].includes(tok)) {
+                            wxString += (wxString ? ' ' : '') + tok;
+                        }
                     }
-                    // Visibility
-                    const vm = rawText.match(/(\d+)\s+(\d+)\/(\d+)SM|(\d+)\/(\d+)SM|(\d+)SM/);
-                    if (vm) {
-                        if (vm[1]) visib = parseInt(vm[1]) + parseInt(vm[2])/parseInt(vm[3]);
-                        else if (vm[4]) visib = parseInt(vm[4])/parseInt(vm[5]);
-                        else if (vm[6]) visib = Math.min(parseInt(vm[6]), 10);
-                    }
-                    // Clouds
-                    const cr = /(FEW|SCT|BKN|OVC)(\d{3})/g;
-                    let cm;
-                    while ((cm = cr.exec(rawText)) !== null)
-                        clouds.push({ cover: cm[1], base: parseInt(cm[2]) * 100 });
-                    // Temp/Dew: 16/M03 or 24/M06 or 15/09
-                    const td = rawText.match(/(M?\d{2})\/(M?\d{2})/);
-                    if (td) {
-                        const pt = s => s.startsWith('M') ? -parseInt(s.slice(1)) : parseInt(s);
-                        tempC = pt(td[1]);
-                        dewC  = pt(td[2]);
-                    }
-                    // Present weather
-                    const wx = rawText.match(/(TS|RA|SN|FG|BR|HZ|DZ|GR|GS|PL|\+RA|\+SN|-RA|-SN|RASN|FZRA|FZDZ|BLSN)/g);
-                    if (wx) wxString = wx.join(' ');
                 }
 
                 // Step 3: Synoptic for 1-minute wind update (if token available)
