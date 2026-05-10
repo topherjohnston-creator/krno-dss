@@ -492,6 +492,8 @@
                 }
 
                 // Step 2: Parse ALL fields from raw METAR (split by space — no regex escape issues)
+                let wdir = null, wspd = 0, wgst = 0, visib = 10;
+                let tempC = null, dewC = null, clouds = [], wxString = '';
                 if (rawText) {
                     const tokens = rawText.split(' ');
                     for (const tok of tokens) {
