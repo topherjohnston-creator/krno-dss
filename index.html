@@ -160,79 +160,112 @@
         </div>
 
         <div class="panel p-4" style="z-index: 10;">
-            <div class="flex justify-between items-center mb-3">
+            <div class="flex justify-between items-center mb-2">
                  <div class="flex items-center gap-3">
                     <h2 class="font-bold text-base tracking-wider uppercase text-slate-300">CURRENT WEATHER OBSERVATIONS</h2>
                     <span class="text-xs font-mono text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded border border-purple-400/20">KRNO</span>
                  </div>
                  <div class="text-[10px] text-slate-500 font-mono" id="asos-time">--</div>
             </div>
-            
-            <div class="flex-grow flex flex-col gap-3">
-                <div class="flex-1 grid grid-cols-4 gap-3">
-                    
-                    <div class="asos-box relative">
-                        <div class="asos-label absolute top-2 left-2">WIND</div>
-                        <div class="threat-badge threat-minor" id="xwind-badge" style="display:none">X-WIND OK</div>
-                        
-                        <div class="wind-wrapper pt-3">
-                            <svg class="wind-rose-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-                                <circle cx="50" cy="50" r="45" fill="none" stroke="#52525b" stroke-width="1.5" />
-                                <path d="M50 5 L50 10 M95 50 L90 50 M50 95 L50 90 M5 50 L10 50" stroke="#71717a" stroke-width="2" />
-                                <g opacity="0.6">
-                                    <line x1="55" y1="15" x2="55" y2="85" stroke="#a1a1aa" stroke-width="4" stroke-linecap="butt" />
-                                    <line x1="45" y1="15" x2="45" y2="85" stroke="#a1a1aa" stroke-width="4" stroke-linecap="butt" />
-                                    <line x1="15" y1="55" x2="85" y2="55" stroke="#a1a1aa" stroke-width="4" stroke-linecap="butt" />
-                                </g>
-                                <g id="wind-arrow" transform="rotate(250, 50, 50)">
-                                    <path d="M50 45 L45 35 L50 38 L55 35 Z" fill="#fbbf24" />
-                                    <line x1="50" y1="5" x2="50" y2="38" stroke="#fbbf24" stroke-width="2" />
-                                    <circle cx="50" cy="50" r="2" fill="#fbbf24" />
-                                </g>
-                            </svg>
-                        </div>
-                        
-                        <div class="wind-stats pb-1">
-                            <div class="wind-speed-row" id="wind-vals">
-                                <span id="w-spd">--</span>
-                                <span class="text-xs text-gray-500 font-normal self-center">G</span>
-                                <span id="w-gst">--</span>
-                                <span class="text-xs text-gray-500 font-normal self-center">KT</span>
-                            </div>
-                            <div class="wind-dir-text">250°</div>
-                        </div>
+
+            <div class="flex-grow flex gap-3 min-h-0">
+
+                <!-- LEFT: Big Wind Graphic -->
+                <div class="asos-box flex flex-col items-center justify-between" style="width:48%; padding:10px;">
+                    <div class="asos-label w-full">WIND</div>
+
+                    <!-- Flight cat + xwind badges -->
+                    <div class="flex gap-2 mt-1 w-full justify-end">
+                        <div class="flight-cat" id="flight-cat-badge">--</div>
+                        <div class="threat-badge" id="xwind-badge" style="display:none;">X-WIND</div>
                     </div>
-                    
+
+                    <!-- Large wind rose -->
+                    <div style="flex:1; width:100%; display:flex; align-items:center; justify-content:center; min-height:0;">
+                        <svg viewBox="0 0 200 200" style="width:100%;height:100%;max-height:160px;" preserveAspectRatio="xMidYMid meet">
+                            <!-- Range rings -->
+                            <circle cx="100" cy="100" r="90" fill="none" stroke="#3f3f46" stroke-width="1"/>
+                            <circle cx="100" cy="100" r="60" fill="none" stroke="#3f3f46" stroke-width="0.5" stroke-dasharray="3,3"/>
+                            <circle cx="100" cy="100" r="30" fill="none" stroke="#3f3f46" stroke-width="0.5" stroke-dasharray="2,2"/>
+                            <!-- Crosshairs -->
+                            <line x1="100" y1="10" x2="100" y2="190" stroke="#52525b" stroke-width="0.5"/>
+                            <line x1="10" y1="100" x2="190" y2="100" stroke="#52525b" stroke-width="0.5"/>
+                            <!-- Cardinal labels -->
+                            <text x="100" y="8" text-anchor="middle" fill="#71717a" font-size="9" font-family="monospace" font-weight="bold">N</text>
+                            <text x="100" y="198" text-anchor="middle" fill="#71717a" font-size="9" font-family="monospace" font-weight="bold">S</text>
+                            <text x="196" y="103" text-anchor="end" fill="#71717a" font-size="9" font-family="monospace" font-weight="bold">E</text>
+                            <text x="4" y="103" text-anchor="start" fill="#71717a" font-size="9" font-family="monospace" font-weight="bold">W</text>
+                            <!-- Runway 16R/34L indicator -->
+                            <line x1="100" y1="14" x2="100" y2="186" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.4"/>
+                            <text x="103" y="20" fill="#a855f7" font-size="7" opacity="0.6">16R</text>
+                            <text x="103" y="184" fill="#a855f7" font-size="7" opacity="0.6">34L</text>
+                            <!-- Wind arrow group -->
+                            <g id="wind-arrow-big" transform="rotate(0, 100, 100)">
+                                <line x1="100" y1="100" x2="100" y2="20" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+                                <polygon points="100,12 94,26 100,22 106,26" fill="#fbbf24"/>
+                            </g>
+                            <circle cx="100" cy="100" r="4" fill="#fbbf24"/>
+                        </svg>
+                    </div>
+
+                    <!-- Speed / Gust / Direction -->
+                    <div class="w-full text-center" style="margin-top:4px;">
+                        <div style="font-family:'JetBrains Mono',monospace; font-size:2rem; font-weight:800; color:white; line-height:1; display:flex; align-items:baseline; justify-content:center; gap:4px;">
+                            <span id="w-spd">--</span>
+                            <span style="font-size:0.7rem; color:#71717a; font-weight:400;">G</span>
+                            <span id="w-gst" style="color:#fbbf24;">--</span>
+                            <span style="font-size:0.7rem; color:#71717a; font-weight:400;">KT</span>
+                        </div>
+                        <div id="wind-dir-text" style="font-family:'JetBrains Mono',monospace; font-size:0.85rem; color:#a1a1aa; font-weight:700;">--°</div>
+                    </div>
+                </div>
+
+                <!-- RIGHT: 2x2 grid -->
+                <div style="width:52%; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+
+                    <!-- Visibility -->
                     <div class="asos-box">
                         <div class="asos-label">VISIBILITY</div>
                         <div class="asos-value text-white" id="vis-val">--</div>
-                        <div class="asos-sub font-bold text-gray-400"></div>
+                        <div class="asos-sub font-bold text-gray-400" id="vis-sub"></div>
                         <i class="ph-fill ph-eye absolute bottom-2 right-2 text-3xl opacity-10"></i>
                     </div>
 
+                    <!-- Ceiling -->
                     <div class="asos-box">
-                        <div class="flight-cat">--</div>
+                        <div class="flight-cat" id="fc-badge">--</div>
                         <div class="asos-label">CEILING</div>
                         <div class="asos-value" id="sky-val">--</div>
                         <div class="asos-sub" id="sky-sub"></div>
                         <i class="ph-fill ph-cloud absolute bottom-2 right-2 text-3xl opacity-10"></i>
                     </div>
 
+                    <!-- Temp / Dew -->
                     <div class="asos-box">
                         <div class="asos-label">TEMP / DEW</div>
-                        <div class="asos-value"><span id="t-val">--</span><span class="text-lg text-gray-500">/</span><span id="d-val">--</span><span class="text-sm align-top text-gray-500">°F</span></div>
+                        <div class="asos-value">
+                            <span id="t-val">--</span>
+                            <span class="text-lg text-gray-500">/</span>
+                            <span id="d-val">--</span>
+                            <span class="text-sm align-top text-gray-500">°F</span>
+                        </div>
                         <div class="asos-sub" id="rh-val">RH --%</div>
                         <i class="ph-fill ph-thermometer absolute bottom-2 right-2 text-3xl opacity-10"></i>
                     </div>
-                </div>
 
-                <div class="flex-1 bg-black rounded p-3 font-mono text-sm text-green-400 overflow-hidden relative border border-gray-800 flex flex-col gap-1">
-                    <div class="absolute top-1 right-2 text-[9px] text-gray-600 font-sans font-bold">RAW METAR</div>
-                    <p class="leading-snug" id="metar-string">LOADING...</p>
-                    <div id="fetch-status" class="text-[10px] text-yellow-500 font-bold mt-1 border-t border-gray-800 pt-1">⟳ FETCHING DATA...</div>
+                    <!-- Present Weather / Lightning -->
+                    <div class="asos-box" id="wx-card">
+                        <div class="asos-label">PRESENT WX</div>
+                        <div id="wx-icons" style="font-size:1.4rem; margin-top:4px; min-height:28px;">--</div>
+                        <div id="wx-detail" class="asos-sub" style="margin-top:4px; font-size:0.65rem; line-height:1.3; color:#a1a1aa;"></div>
+                        <div id="ltg-alert" style="display:none; margin-top:4px; background:#7c3aed22; border:1px solid #a855f7; border-radius:3px; padding:2px 6px; font-size:0.65rem; font-weight:800; color:#a855f7; font-family:monospace;">⚡ SUSPEND OPS</div>
+                        <i class="ph-fill ph-cloud-lightning absolute bottom-2 right-2 text-3xl opacity-10"></i>
+                    </div>
+
                 </div>
             </div>
         </div>
+
 
         <div class="panel p-4 flex flex-col" style="z-index: 20;">
             <div class="flex justify-between items-center mb-2">
@@ -257,11 +290,12 @@
     <script>
         // --- BACKEND URL (auto-loaded from config.json, updated by Colab Cell 6b) ---
         let BACKEND_URL = "";
+        let _config = {};
         async function loadConfig() {
             try {
                 const r = await fetch('./config.json?t=' + Date.now());
-                const cfg = await r.json();
-                BACKEND_URL = cfg.backend_url || "";
+                _config = await r.json();
+                BACKEND_URL = _config.backend_url || "";
             } catch(e) { BACKEND_URL = ""; }
         }
 
@@ -306,12 +340,33 @@
             { id: 'FZRA', icon: "ph-cloud-snow", name: "Freezing Rain", timelineName: "FRZ RAIN", prep: "Chemical treatment" },
             { id: 'FlashFreeze', icon: "ph-thermometer-cold", name: "Flash Freeze", timelineName: "FLASH FRZ", prep: "Chemical treatment efficacy" },
             { id: 'Rain', icon: "ph-drop", name: "Rain/Flooding", timelineName: "RAIN", prep: "Drainage capacity" },
-            { id: 'Temp', icon: "ph-thermometer", name: "COLD/HEAT", prep: "Frostbite/safety" }
+            { id: 'Cold', icon: "ph-thermometer-cold", name: "Cold", timelineName: "COLD", prep: "Frostbite/safety" },
+            { id: 'Heat', icon: "ph-thermometer-hot", name: "Heat", timelineName: "HEAT", prep: "Heatstroke/safety" }
         ];
 
         document.addEventListener('DOMContentLoaded', () => {
             initDashboard();
-            setInterval(() => { initDashboard(); }, 5 * 60 * 1000);
+            // METAR + Alerts refresh every 60 seconds (matches 1-min Synoptic data)
+        setInterval(() => { fetchMETAR(); fetchAlerts(); }, 60 * 1000);
+
+        // REFS threats + timeline refresh every 30 minutes (data doesn't change faster)
+        setInterval(() => {
+            if (BACKEND_URL) {
+                const fetchOpts = { headers: { "ngrok-skip-browser-warning": "true" } };
+                Promise.allSettled([
+                    fetch(`${BACKEND_URL}/api/threats`, fetchOpts).then(r=>r.json()),
+                    fetch(`${BACKEND_URL}/api/timeline`, fetchOpts).then(r=>r.json())
+                ]).then(([threatsResp, timelineResp]) => {
+                    if (threatsResp.status==='fulfilled' && threatsResp.value.threats) {
+                        refsThreats = threatsResp.value.threats;
+                        renderHazardCards(refsThreats, refsTimeline);
+                    }
+                    if (timelineResp.status==='fulfilled' && timelineResp.value.timeline) {
+                        refsTimeline = timelineResp.value.timeline;
+                    }
+                });
+            }
+        }, 30 * 60 * 1000);
         });
 
         const tooltip = document.getElementById('global-tooltip');
@@ -341,7 +396,7 @@
         function getHazardTimeString(h_id, refsTimeline) {
             if (!refsTimeline) return "";
             
-            const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE' };
+            const hazardMapping = { 'Cold': 'COLD', 'Heat': 'HEAT', 'FlashFreeze': 'FLASH_FREEZE' };
             const refKey = hazardMapping[h_id] || h_id.toUpperCase();
             const tData = refsTimeline[refKey];
             if(!tData) return "";
@@ -395,91 +450,78 @@
         // --- FETCH METAR & ALERTS ---
         async function fetchMETAR() {
             try {
-                // Fetch raw METAR from tgftp via corsproxy.io (same source as original Netlify function)
-                const tgftpUrl = 'https://tgftp.nws.noaa.gov/data/observations/metar/stations/KRNO.TXT';
-                
-                // Try multiple CORS proxies in order
-                let text = null;
-                const proxies = [
-                    `https://corsproxy.io/?${encodeURIComponent(tgftpUrl)}`,
-                    `https://api.allorigins.win/raw?url=${encodeURIComponent(tgftpUrl)}`,
-                    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(tgftpUrl)}`,
-                ];
-                for (const proxyUrl of proxies) {
+                const token = _config.synoptic_token || '';
+
+                // Synoptic Data — 1-minute ASOS data for KRNO
+                let synData = null;
+                if (token) {
                     try {
-                        const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(5000) });
-                        if (resp.ok) { text = (await resp.text()).trim(); if (text) break; }
-                    } catch(e) { continue; }
+                        const synUrl = `https://api.synopticdata.com/v2/stations/latest?stid=KRNO&vars=air_temp,wind_speed,wind_direction,wind_gust,dew_point_temperature,visibility&units=english&token=${token}`;
+                        const synResp = await fetch(synUrl);
+                        if (synResp.ok) synData = await synResp.json();
+                    } catch(e) {}
                 }
-                if (!text) throw new Error('All CORS proxies failed');
-                
-                // tgftp format: line 1 = timestamp, line 2 = raw METAR
-                const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-                const rawOb = lines.length >= 2 ? lines[1] : lines[0];
-                
-                // Parse raw METAR string
-                const parsed = parseRawMetar(rawOb);
-                liveMetar = { ...parsed, rawOb };
-                
-                setStatus('✓ Source: NOAA tgftp via corsproxy.io', '#22c55e');
+
+                // aviationweather.gov — for ceiling, present weather, lightning remarks
+                let rawText = '';
+                let wxData = null;
+                try {
+                    const wxResp = await fetch('https://aviationweather.gov/api/data/metar?ids=KRNO&format=json&taf=false');
+                    if (wxResp.ok) { wxData = (await wxResp.json())[0]; rawText = wxData?.rawOb || ''; }
+                } catch(e) {}
+
+                // Build liveMetar from Synoptic (primary) + aviationweather (secondary)
+                let obs = synData?.STATION?.[0]?.OBSERVATIONS || {};
+
+                const wspd  = obs.wind_speed_value_1?.value ?? wxData?.wspd ?? null;
+                const wdir  = obs.wind_direction_value_1?.value ?? wxData?.wdir ?? null;
+                const wgst  = obs.wind_gust_value_1?.value ?? wxData?.wgst ?? 0;
+                const tempF = obs.air_temp_value_1?.value ?? (wxData?.temp != null ? wxData.temp*9/5+32 : null);
+                const dewF  = obs.dew_point_temperature_value_1d?.value ?? (wxData?.dewp != null ? wxData.dewp*9/5+32 : null);
+                const visib = obs.visibility_value_1?.value ?? wxData?.visib ?? 10;
+
+                // RH from Magnus
+                let rh = null;
+                if (tempF != null && dewF != null) {
+                    const tC=(tempF-32)*5/9, dC=(dewF-32)*5/9;
+                    rh = Math.round(100*Math.exp(17.625*dC/(243.04+dC))/Math.exp(17.625*tC/(243.04+tC)));
+                }
+
+                // Clouds from aviationweather.gov
+                const clouds = (wxData?.clouds || []).map(c=>({cover:c.cover, base:c.base})).filter(c=>c.cover && c.cover!=='CLR' && c.cover!=='SKC');
+
+                // Present weather — parse from raw METAR
+                const wxString = wxData?.wxString || '';
+                const wxLtg = parseRawMetarLightning(rawText);
+
+                // Observation time
+                const obsTime = obs.air_temp_value_1?.date_time || wxData?.reportTime;
+
+                liveMetar = { wdir, wspd: wspd||0, wgst: wgst||0, visib: visib||10,
+                              temp: tempF != null ? (tempF-32)*5/9 : null,
+                              dewp: dewF  != null ? (dewF -32)*5/9 : null,
+                              rh, clouds, wxString, lightning: wxLtg, rawOb: rawText, reportTime: obsTime };
+
+                const src = token && synData ? 'Synoptic + aviationweather.gov' : 'aviationweather.gov';
+                setStatus(`✓ Source: ${src}`, '#22c55e');
                 applyMETARtoDisplay(liveMetar);
             } catch(e) {
                 setStatus(`✗ METAR Fetch failed: ${e.message}`, '#f44336');
             }
         }
 
-        function parseRawMetar(raw) {
-            const m = { wdir: null, wspd: 0, wgst: 0, visib: 10, temp: null, dewp: null, rh: null, clouds: [], wxString: '', reportTime: null };
-            if (!raw) return m;
-
-            // Wind: 01004KT or 01004G12KT or VRB04KT or 00000KT
-            const windMatch = raw.match(/\b(VRB|\d{3})(\d{2,3})(G(\d{2,3}))?KT\b/);
-            if (windMatch) {
-                m.wdir = windMatch[1] === 'VRB' ? null : parseInt(windMatch[1]);
-                m.wspd = parseInt(windMatch[2]);
-                m.wgst = windMatch[4] ? parseInt(windMatch[4]) : 0;
-            }
-
-            // Visibility: 10SM, 1/2SM, 3/4SM, 1 1/2SM
-            const visMatch = raw.match(/\b(\d+)\s+(\d+)\/(\d+)SM\b|\b(\d+)\/(\d+)SM\b|\b(\d+)SM\b|\bM(\d+)\/(\d+)SM\b/);
-            if (visMatch) {
-                if (visMatch[1]) m.visib = parseInt(visMatch[1]) + parseInt(visMatch[2])/parseInt(visMatch[3]);
-                else if (visMatch[4]) m.visib = parseInt(visMatch[4])/parseInt(visMatch[5]);
-                else if (visMatch[6]) m.visib = Math.min(parseInt(visMatch[6]), 10);
-                else if (visMatch[7]) m.visib = parseInt(visMatch[7])/parseInt(visMatch[8]) * 0.5;
-            }
-
-            // Clouds: FEW018 BKN025 OVC060 SKC CLR
-            const cloudRe = /(FEW|SCT|BKN|OVC)(\d{3})([A-Z]*)?/g;
-            let cm;
-            while ((cm = cloudRe.exec(raw)) !== null) {
-                m.clouds.push({ cover: cm[1], base: parseInt(cm[2]) * 100 });
-            }
-
-            // Temp/Dew: 24/M06 or 15/09
-            const tdMatch = raw.match(/\b(M?\d{2})\/(M?\d{2})\b/);
-            if (tdMatch) {
-                m.temp = parseTD(tdMatch[1]);
-                m.dewp = parseTD(tdMatch[2]);
-                // RH using Magnus formula
-                const e  = Math.exp(17.625 * m.dewp / (243.04 + m.dewp));
-                const es = Math.exp(17.625 * m.temp / (243.04 + m.temp));
-                m.rh = Math.round(100 * e / es);
-            }
-
-            // Weather string
-            const wxCodes = raw.match(/\b(TS|RA|SN|FG|BR|HZ|DZ|GR|GS|PL|SQ|FC|\+RA|\+SN|-RA|-SN|RASN|SNRA|FZRA|FZDZ|BLSN|DRSN)\b/g);
-            if (wxCodes) m.wxString = wxCodes.join(' ');
-
-            return m;
+        function parseRawMetarLightning(raw) {
+            if (!raw) return { ts: false, ltgcg: false, ltgvc: false, dir: '' };
+            const hasTS    = /\bTS\b|\bTSRA\b|\bTSGR\b/.test(raw);
+            const hasLTGCG = /\bLTGCG\b/.test(raw);
+            const hasVC    = /\bVC\b/.test(raw);
+            const hasOHD   = /\bOHD\b/.test(raw);
+            const dirMatch = raw.match(/LTGCG\s+(OHD|DSNT\s+[NSEW]+|VC\s+[NSEW]*|[NSEW]+)/);
+            const dir      = dirMatch ? dirMatch[1].trim() : '';
+            return { ts: hasTS, ltgcg: hasLTGCG, ltgvc: hasVC||hasOHD, dir };
         }
 
-        function parseTD(s) {
-            if (!s) return null;
-            const neg = s.startsWith('M');
-            const val = parseInt(s.replace('M',''));
-            return neg ? -val : val;
-        }
+
 
         async function fetchAlerts() {
             try {
@@ -545,98 +587,144 @@
 
         function applyMETARtoDisplay(m) {
             const wDir = m.wdir; const wSpd = m.wspd || 0; const wGst = m.wgst || 0;
-            const isCalm = wSpd === 0;
+            const isCalm = wSpd === 0 && wDir === null;
+
+            // Wind speed/gust
             document.getElementById('w-spd').textContent = isCalm ? 'CALM' : wSpd;
             document.getElementById('w-spd').style.color = isCalm ? '#71717a' : getColor('wind', wSpd);
-            document.getElementById('w-gst').textContent = wGst > 0 ? wGst : '--';
-            document.getElementById('w-gst').style.color = wGst > 0 ? getColor('wind', wGst) : '#71717a';
-            document.querySelector('.wind-dir-text').textContent = isCalm ? 'CALM' : `${wDir}°`;
+            const gstEl = document.getElementById('w-gst');
+            gstEl.textContent = wGst > 0 ? wGst : '--';
+            gstEl.style.color = wGst > 0 ? getColor('wind', wGst) : '#71717a';
 
-            const arrowGroup = document.getElementById('wind-arrow');
-            if (arrowGroup) {
-                if (isCalm) arrowGroup.style.opacity = '0.2';
-                else { arrowGroup.style.opacity = '1'; arrowGroup.setAttribute('transform', `rotate(${wDir}, 50, 50)`); }
+            // Wind direction text
+            const wdirText = document.getElementById('wind-dir-text');
+            if (wdirText) wdirText.textContent = isCalm ? 'CALM' : `${wDir}°`;
+
+            // Big wind arrow
+            const arrowBig = document.getElementById('wind-arrow-big');
+            if (arrowBig) {
+                if (isCalm) arrowBig.style.opacity = '0.2';
+                else { arrowBig.style.opacity = '1'; arrowBig.setAttribute('transform', `rotate(${wDir}, 100, 100)`); }
             }
 
-            // Crosswind badge — best runway at KRNO
+            // Crosswind badge (16R/34L)
             const xwBadge = document.getElementById('xwind-badge');
-            if (xwBadge) {
+            if (xwBadge && !isCalm) {
                 const xw = getKRNOCrosswind(wDir, wSpd, wGst);
-                if (!isCalm) {
-                    xwBadge.style.display = 'block';
-                    xwBadge.textContent = xw.label;
-                    xwBadge.style.backgroundColor = xw.color;
-                    xwBadge.style.color = 'white';
-                } else {
-                    xwBadge.style.display = 'none';
-                }
+                xwBadge.style.display = 'block';
+                xwBadge.textContent = xw.label;
+                xwBadge.style.backgroundColor = xw.color;
+                xwBadge.style.color = 'white';
+            } else if (xwBadge) {
+                xwBadge.style.display = 'none';
             }
 
-            const visEl = document.getElementById('vis-val') || document.querySelector('.asos-box:nth-child(2) .asos-value');
+            // Flight category
+            const flightCat = getFlightCat(m);
+            ['flight-cat', 'fc-badge'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) { el.textContent = flightCat.cat; el.style.backgroundColor = flightCat.color; }
+            });
+
+            // Visibility
+            const visEl = document.getElementById('vis-val');
             if (visEl) {
                 const vis = m.visib || 10;
                 visEl.textContent = vis >= 10 ? '10+ SM' : `${vis} SM`;
                 visEl.style.color = vis < 1 ? '#f44336' : vis < 3 ? '#ff9800' : vis < 5 ? '#2196f3' : 'white';
             }
 
-            // Ceiling display
+            // Ceiling
             const skyVal = document.getElementById('sky-val');
             const skySub = document.getElementById('sky-sub');
             if (skyVal) {
                 const clouds = m.clouds || [];
                 if (clouds.length === 0) {
-                    skyVal.textContent = 'CLR';
-                    skyVal.style.color = 'white';
+                    skyVal.textContent = 'CLR'; skyVal.style.color = 'white';
                     if (skySub) skySub.textContent = '';
                 } else {
-                    // Show lowest layer
-                    const lowest = clouds.reduce((a, b) => (a.base < b.base ? a : b));
-                    // Ceiling = lowest BKN or OVC
                     const ceilLayer = clouds.find(c => ['BKN','OVC','VV'].includes(c.cover));
-                    const displayLayer = ceilLayer || lowest;
-                    const baseStr = displayLayer.base != null ? String(Math.round(displayLayer.base/100)).padStart(3,'0') : '???';
-                    skyVal.textContent = `${displayLayer.cover}${baseStr}`;
-                    skyVal.style.color = ceilLayer ? (ceilLayer.base < 1000 ? '#f44336' : ceilLayer.base < 3000 ? '#2196f3' : 'white') : '#71717a';
-                    // Sub — cloud type if present (ACSL, CB, TCU etc)
-                    if (skySub) {
-                        const allLayers = clouds.map(c => {
-                            const baseStr = c.base != null ? String(Math.round(c.base/100)).padStart(3,'0') : '';
-                            return `${c.cover}${baseStr}`;
-                        }).join(' ');
-                        skySub.textContent = clouds.length > 1 ? allLayers : '';
+                    const display   = ceilLayer || clouds.reduce((a,b)=>a.base<b.base?a:b);
+                    const baseStr   = display.base != null ? String(Math.round(display.base/100)).padStart(3,'0') : '???';
+                    skyVal.textContent = `${display.cover}${baseStr}`;
+                    skyVal.style.color = ceilLayer ? (ceilLayer.base<1000?'#f44336':ceilLayer.base<3000?'#2196f3':'white') : '#71717a';
+                    if (skySub) skySub.textContent = clouds.length>1 ? clouds.map(c=>`${c.cover}${String(Math.round(c.base/100)).padStart(3,'0')}`).join(' ') : '';
+                }
+            }
+
+            // Temp / Dew / RH
+            const tC = m.temp; const dC = m.dewp;
+            if (tC !== null && tC !== undefined) {
+                const tF = cToF(tC); const dF = dC !== null && dC !== undefined ? cToF(dC) : null;
+                document.getElementById('t-val').textContent = Math.round(tF);
+                document.getElementById('t-val').style.color = getColor('temp', tF);
+                document.getElementById('d-val').textContent = dF !== null ? Math.round(dF) : '--';
+                if (dF !== null) document.getElementById('d-val').style.color = getColor('dew', dF);
+                const rhEl = document.getElementById('rh-val');
+                if (rhEl) rhEl.textContent = m.rh != null ? `RH ${m.rh}%` : 'RH --%';
+            }
+
+            // Present Weather card
+            const wxIcons  = document.getElementById('wx-icons');
+            const wxDetail = document.getElementById('wx-detail');
+            const ltgAlert = document.getElementById('ltg-alert');
+            const wxCard   = document.getElementById('wx-card');
+
+            if (wxIcons) {
+                const wx = m.wxString || '';
+                const ltg = m.lightning || {};
+
+                // Build display
+                let iconText = '';
+                if (ltg.ts || wx.includes('TS'))   iconText += '⛈ ';
+                if (wx.includes('RA') || wx.includes('DZ')) iconText += '🌧 ';
+                if (wx.includes('SN') || wx.includes('PL')) iconText += '❄️ ';
+                if (wx.includes('FG') || wx.includes('BR')) iconText += '🌫 ';
+                if (wx.includes('GR') || wx.includes('GS')) iconText += '🌨 ';
+                if (wx.includes('FZ'))  iconText += '🧊 ';
+                if (!iconText && !ltg.ltgcg) iconText = 'NONE';
+                wxIcons.textContent = iconText.trim() || 'NONE';
+
+                // Detail text
+                let detail = '';
+                if (ltg.ltgcg) detail += `LTGCG ${ltg.dir}`.trim();
+                if (ltg.ts)    detail += (detail ? ' • ' : '') + 'TS AT STATION';
+                if (wx && !ltg.ts) detail += (detail ? ' • ' : '') + wx;
+                if (wxDetail) wxDetail.textContent = detail;
+
+                // SUSPEND OPS alert
+                const suspendOps = ltg.ts || ltg.ltgvc || (ltg.ltgcg && (ltg.dir.includes('OHD') || ltg.dir.includes('VC')));
+                if (ltgAlert) {
+                    ltgAlert.style.display = suspendOps ? 'block' : 'none';
+                    if (wxCard && suspendOps) {
+                        wxCard.style.borderColor = '#a855f7';
+                        wxCard.style.boxShadow = '0 0 8px rgba(168,85,247,0.4)';
+                    } else if (wxCard) {
+                        wxCard.style.borderColor = '';
+                        wxCard.style.boxShadow = '';
                     }
                 }
             }
 
-            const flightCat = getFlightCat(m);
-            const fcEl = document.querySelector('.flight-cat');
-            if (fcEl) { fcEl.textContent = flightCat.cat; fcEl.style.backgroundColor = flightCat.color; }
-
-            const tC = m.temp !== undefined ? m.temp : null;
-            const dC = m.dewp !== undefined ? m.dewp : null;
-            if (tC !== null) {
-                const tF = cToF(tC); const dF = dC !== null ? cToF(dC) : '--';
-                document.getElementById('t-val').textContent = Math.round(tF);
-                document.getElementById('t-val').style.color = getColor('temp', tF);
-                document.getElementById('d-val').textContent = dC !== null ? Math.round(dF) : '--';
-                if (dC !== null) document.getElementById('d-val').style.color = getColor('dew', dF);
-                const rh = m.rh != null ? m.rh : '--';
-                const rhEl = document.querySelector('.asos-box:nth-child(4) .asos-sub');
-                if (rhEl) rhEl.textContent = `RH ${rh}%`;
+            // Update timestamp
+            const timeEl = document.getElementById('asos-time');
+            if (timeEl && m.reportTime) {
+                const d = new Date(m.reportTime);
+                const mins = Math.round((Date.now() - d.getTime()) / 60000);
+                timeEl.textContent = mins <= 1 ? 'UPDATED JUST NOW' : `UPDATED ${mins}m AGO`;
             }
 
-            const metarEl = document.getElementById('metar-string');
-            if (metarEl) metarEl.textContent = m.rawOb || 'API PARSED ONLY (NO RAW MSG)';
-            
+            // Live indicator
             const dot = document.getElementById('live-dot');
             const label = document.getElementById('live-label');
             if (dot && label) { dot.style.background = '#22c55e'; label.textContent = 'METAR LIVE'; label.style.color = '#22c55e'; }
         }
 
+
         // --- GET REFS RISK LEVEL FROM TIMELINE JSON ---
         function getRiskForVariable(id, i, refsTimeline) {
             if (!refsTimeline) return 0; // Grey out if REFS failed
-            const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE' };
+            const hazardMapping = { 'Cold': 'COLD', 'Heat': 'HEAT', 'FlashFreeze': 'FLASH_FREEZE' };
             const refKey = hazardMapping[id] || id.toUpperCase();
             
             const hourData = refsTimeline[refKey];
@@ -780,7 +868,7 @@
                     if (tmPanel && !document.getElementById('refs-status')) {
                         const msg = document.createElement('div');
                         msg.id = 'refs-status';
-                        msg.style.cssText = 'position:absolute;bottom:8px;right:12px;font-size:10px;color:#71717a;font-family:monospace;';
+                        msg.style.cssText = 'position:absolute;bottom:8px;left:12px;font-size:10px;color:#71717a;font-family:monospace;z-index:50;';
                         msg.textContent = 'REFS: No backend configured — run Colab notebook';
                         tmPanel.style.position = 'relative';
                         tmPanel.appendChild(msg);
@@ -800,7 +888,7 @@
                 if(grid) {
                     grid.innerHTML = '';
                     
-                    const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE' };
+                    const hazardMapping = { 'Cold': 'COLD', 'Heat': 'HEAT', 'FlashFreeze': 'FLASH_FREEZE' };
 
                     const hazards = HAZARD_DETAILS.map(h => {
                         let prob = 0;
