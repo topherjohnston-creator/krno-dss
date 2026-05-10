@@ -354,10 +354,17 @@
         document.addEventListener('DOMContentLoaded', () => {
             initDashboard();
 
-            // METAR + Alerts: refresh every 60 seconds (1-min Synoptic data)
+            // Clock — update every second
+            setInterval(() => {
+                globalNow = new Date();
+                const timeEl = document.getElementById('timestamp2');
+                if (timeEl) timeEl.textContent = getHeaderDate(globalNow);
+            }, 1000);
+
+            // METAR + Alerts — every 60 seconds
             setInterval(() => { fetchMETAR(); fetchAlerts(); }, 60 * 1000);
 
-            // REFS: refresh every 30 minutes
+            // REFS threats + timeline — every 30 minutes
             setInterval(() => { initDashboard(); }, 30 * 60 * 1000);
         });
 
