@@ -255,8 +255,20 @@
     </div>
 
     <script>
-        // --- BACKEND URL ---
-        const BACKEND_URL = "https://factsheet-aim-washstand.ngrok-free.dev"; // Update this if ngrok restarts
+        // --- BACKEND URL (loaded from config.json — updated automatically by Colab) ---
+        let BACKEND_URL = "";
+
+        async function loadConfig() {
+            try {
+                const r = await fetch('./config.json?t=' + Date.now());
+                const cfg = await r.json();
+                BACKEND_URL = cfg.backend_url || "";
+                console.log('Backend URL loaded:', BACKEND_URL);
+            } catch(e) {
+                console.warn('config.json not found — REFS data unavailable');
+                BACKEND_URL = "";
+            }
+        }
 
         const TOTAL_HOURS = 48; 
         let globalNow = new Date(); 
@@ -614,6 +626,7 @@
 
         async function initDashboard() {
             try {
+                await loadConfig();
                 globalNow = new Date();
                 const timeEl = document.getElementById('timestamp2');
                 if(timeEl) timeEl.textContent = getHeaderDate(globalNow);
