@@ -469,84 +469,102 @@
             try {
                 const token = _config.synoptic_token || '';
 
-                // Synoptic Data — 1-minute ASOS data for KRNO
-                let synData = null;
+                // Step 1: Get raw METAR string from tgftp (most reliable source)
+                let rawText = '';
+                const tgftpUrl = 'https://tgftp.nws.noaa.gov/data/observations/metar/stations/KRNO.TXT';
+                const proxies = [
+                    `https://corsproxy.io/?${encodeURIComponent(tgftpUrl)}`,
+                    `https://api.allorigins.win/raw?url=${encodeURIComponent(tgftpUrl)}`,
+                    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(tgftpUrl)}`,
+                ];
+                for (const proxy of proxies) {
+                    try {
+                        const r = await fetch(proxy, { signal: AbortSignal.timeout(5000) });
+                        if (r.ok) {
+                            const t = (await r.text()).trim();
+                            if (t && t.includes('KRNO')) {
+                                const lines = t.split('\n').map(l => l.trim()).filter(l => l);
+                                rawText = lines.length >= 2 ? lines[1] : lines[0];
+                                break;
+                            }
+                        }
+                    } catch(e) { continue; }
+                }
+
+                // Step 2: Parse ALL fields from raw METAR (most reliable)
+                let wdir = null, wspd = 0, wgst = 0, visib = 10;
+                let tempC = null, dewC = null, clouds = [], wxString = '';
+
+                if (rawText) {
+                    // Wind: 26005KT or 26005G12KT or VRB04KT or 00000KT
+                    const wm = rawText.match(/(VRB|\d{3})(\d{2,3})(G(\d{2,3}))?KT/);
+                    if (wm) {
+                        wdir = wm[1] === 'VRB' ? null : parseInt(wm[1]);
+                        wspd = parseInt(wm[2]);
+                        wgst = wm[4] ? parseInt(wm[4]) : 0;
+                    }
+                    // Visibility
+                    const vm = rawText.match(/(\d+)\s+(\d+)\/(\d+)SM|(\d+)\/(\d+)SM|(\d+)SM/);
+                    if (vm) {
+                        if (vm[1]) visib = parseInt(vm[1]) + parseInt(vm[2])/parseInt(vm[3]);
+                        else if (vm[4]) visib = parseInt(vm[4])/parseInt(vm[5]);
+                        else if (vm[6]) visib = Math.min(parseInt(vm[6]), 10);
+                    }
+                    // Clouds
+                    const cr = /(FEW|SCT|BKN|OVC)(\d{3})/g;
+                    let cm;
+                    while ((cm = cr.exec(rawText)) !== null)
+                        clouds.push({ cover: cm[1], base: parseInt(cm[2]) * 100 });
+                    // Temp/Dew: 16/M03 or 24/M06 or 15/09
+                    const td = rawText.match(/(M?\d{2})\/(M?\d{2})/);
+                    if (td) {
+                        const pt = s => s.startsWith('M') ? -parseInt(s.slice(1)) : parseInt(s);
+                        tempC = pt(td[1]);
+                        dewC  = pt(td[2]);
+                    }
+                    // Present weather
+                    const wx = rawText.match(/(TS|RA|SN|FG|BR|HZ|DZ|GR|GS|PL|\+RA|\+SN|-RA|-SN|RASN|FZRA|FZDZ|BLSN)/g);
+                    if (wx) wxString = wx.join(' ');
+                }
+
+                // Step 3: Synoptic for 1-minute wind update (if token available)
                 if (token) {
                     try {
-                        const synUrl = `https://api.synopticdata.com/v2/stations/latest?stid=KRNO&vars=air_temp,wind_speed,wind_direction,wind_gust,dew_point_temperature,visibility&units=english&token=${token}`;
-                        const synResp = await fetch(synUrl);
-                        if (synResp.ok) synData = await synResp.json();
-                    } catch(e) {}
+                        const synUrl = `https://api.synopticdata.com/v2/stations/latest?stid=KRNO&vars=wind_speed,wind_direction,wind_gust&units=english&token=${token}`;
+                        const sr = await fetch(synUrl, { signal: AbortSignal.timeout(8000) });
+                        if (sr.ok) {
+                            const sd = await sr.json();
+                            const obs = sd?.STATION?.[0]?.OBSERVATIONS || {};
+                            if (obs.wind_speed_value_1?.value != null) {
+                                wspd = obs.wind_speed_value_1.value;
+                                wdir = obs.wind_direction_value_1?.value ?? wdir;
+                                // Only use Synoptic gust if recent (within 10 min)
+                                const gustObs = obs.wind_gust_value_1;
+                                if (gustObs?.value && gustObs?.date_time) {
+                                    const age = (Date.now() - new Date(gustObs.date_time).getTime()) / 60000;
+                                    if (age <= 10) wgst = gustObs.value;
+                                }
+                            }
+                        }
+                    } catch(e) { /* silent fallback to raw METAR wind */ }
                 }
 
-                // aviationweather.gov — for ceiling, present weather, lightning remarks
-                let rawText = '';
-                let wxData = null;
-                try {
-                    const wxResp = await fetch('https://aviationweather.gov/api/data/metar?ids=KRNO&format=json&taf=false');
-                    if (wxResp.ok) { wxData = (await wxResp.json())[0]; rawText = wxData?.rawOb || ''; }
-                } catch(e) {}
-
-                // Build liveMetar from Synoptic (primary) + aviationweather (secondary)
-                let obs = synData?.STATION?.[0]?.OBSERVATIONS || {};
-
-                const wspd  = obs.wind_speed_value_1?.value ?? wxData?.wspd ?? null;
-                const wdir  = obs.wind_direction_value_1?.value ?? wxData?.wdir ?? null;
-
-                // Only use Synoptic gust if observation is within last 10 minutes
-                let wgst = 0;
-                const gustObs = obs.wind_gust_value_1;
-                if (gustObs?.value && gustObs?.date_time) {
-                    const gustAge = (Date.now() - new Date(gustObs.date_time).getTime()) / 60000;
-                    wgst = gustAge <= 10 ? gustObs.value : 0;
-                }
-                // Fall back to aviationweather.gov gust if Synoptic gust is stale
-                if (wgst === 0 && wxData?.wgst) wgst = wxData.wgst;
-                // Temperature — parse from raw METAR string (most reliable)
-                // Format: 24/M06 = 24°C / -6°C, or M02/M08 = -2°C / -8°C
-                let tempC = null, dewC = null;
-                const tdMatch = rawText.match(/\b(M?\d{2})\/(M?\d{2})\b/);
-                if (tdMatch) {
-                    const parseTD = s => s.startsWith('M') ? -parseInt(s.slice(1)) : parseInt(s);
-                    tempC = parseTD(tdMatch[1]);
-                    dewC  = parseTD(tdMatch[2]);
-                }
-                // Fallback: Synoptic (°F) → convert to °C
-                if (tempC === null && obs.air_temp_value_1?.value != null)
-                    tempC = (obs.air_temp_value_1.value - 32) * 5/9;
-                if (dewC === null && obs.dew_point_temperature_value_1d?.value != null)
-                    dewC  = (obs.dew_point_temperature_value_1d.value - 32) * 5/9;
-                // Fallback: aviationweather.gov (already °C)
-                if (tempC === null && wxData?.temp != null) tempC = wxData.temp;
-                if (dewC  === null && wxData?.dewp != null) dewC  = wxData.dewp;
-                const tempF = tempC != null ? tempC * 9/5 + 32 : null;
-                const dewF  = dewC  != null ? dewC  * 9/5 + 32 : null;
-                const visib = obs.visibility_value_1?.value ?? wxData?.visib ?? 10;
-
-                // RH from Magnus
+                // Step 4: RH from Magnus formula
                 let rh = null;
-                if (tempF != null && dewF != null) {
-                    const tC=(tempF-32)*5/9, dC=(dewF-32)*5/9;
-                    rh = Math.round(100*Math.exp(17.625*dC/(243.04+dC))/Math.exp(17.625*tC/(243.04+tC)));
+                if (tempC != null && dewC != null) {
+                    const e  = Math.exp(17.625 * dewC  / (243.04 + dewC));
+                    const es = Math.exp(17.625 * tempC / (243.04 + tempC));
+                    rh = Math.round(100 * e / es);
                 }
 
-                // Clouds from aviationweather.gov
-                const clouds = (wxData?.clouds || []).map(c=>({cover:c.cover, base:c.base})).filter(c=>c.cover && c.cover!=='CLR' && c.cover!=='SKC');
+                // Step 5: Lightning from raw METAR
+                const lightning = parseRawMetarLightning(rawText);
 
-                // Present weather — parse from raw METAR
-                const wxString = wxData?.wxString || '';
-                const wxLtg = parseRawMetarLightning(rawText);
+                liveMetar = { wdir, wspd, wgst, visib, temp: tempC, dewp: dewC,
+                              rh, clouds, wxString, lightning, rawOb: rawText, reportTime: new Date().toISOString() };
 
-                // Observation time
-                const obsTime = obs.air_temp_value_1?.date_time || wxData?.reportTime;
-
-                liveMetar = { wdir, wspd: wspd||0, wgst: wgst||0, visib: visib||10,
-                              temp: tempC,
-                              dewp: dewC,
-                              rh, clouds, wxString, lightning: wxLtg, rawOb: rawText, reportTime: obsTime };
-
-                const src = token && synData ? 'Synoptic + aviationweather.gov' : 'aviationweather.gov';
-                setStatus(`✓ Source: ${src}`, '#22c55e');
+                const src = rawText ? (token ? 'tgftp + Synoptic' : 'tgftp') : 'failed';
+                setStatus(`✓ Source: ${src}`, rawText ? '#22c55e' : '#f44336');
                 applyMETARtoDisplay(liveMetar);
             } catch(e) {
                 setStatus(`✗ METAR Fetch failed: ${e.message}`, '#f44336');
