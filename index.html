@@ -467,7 +467,16 @@
 
                 const wspd  = obs.wind_speed_value_1?.value ?? wxData?.wspd ?? null;
                 const wdir  = obs.wind_direction_value_1?.value ?? wxData?.wdir ?? null;
-                const wgst  = obs.wind_gust_value_1?.value ?? wxData?.wgst ?? 0;
+
+                // Only use Synoptic gust if observation is within last 10 minutes
+                let wgst = 0;
+                const gustObs = obs.wind_gust_value_1;
+                if (gustObs?.value && gustObs?.date_time) {
+                    const gustAge = (Date.now() - new Date(gustObs.date_time).getTime()) / 60000;
+                    wgst = gustAge <= 10 ? gustObs.value : 0;
+                }
+                // Fall back to aviationweather.gov gust if Synoptic gust is stale
+                if (wgst === 0 && wxData?.wgst) wgst = wxData.wgst;
                 const tempF = obs.air_temp_value_1?.value ?? (wxData?.temp != null ? wxData.temp*9/5+32 : null);
                 const dewF  = obs.dew_point_temperature_value_1d?.value ?? (wxData?.dewp != null ? wxData.dewp*9/5+32 : null);
                 const visib = obs.visibility_value_1?.value ?? wxData?.visib ?? 10;
