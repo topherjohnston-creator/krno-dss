@@ -502,8 +502,14 @@
                 }
                 // Fall back to aviationweather.gov gust if Synoptic gust is stale
                 if (wgst === 0 && wxData?.wgst) wgst = wxData.wgst;
-                const tempF = obs.air_temp_value_1?.value ?? (wxData?.temp != null ? wxData.temp*9/5+32 : null);
-                const dewF  = obs.dew_point_temperature_value_1d?.value ?? (wxData?.dewp != null ? wxData.dewp*9/5+32 : null);
+                // Temperature — Synoptic returns °F, aviationweather returns °C
+                const synTempF = obs.air_temp_value_1?.value ?? null;
+                const synDewF  = obs.dew_point_temperature_value_1d?.value ?? null;
+                const wxTempF  = wxData?.temp != null ? wxData.temp * 9/5 + 32 : null;
+                const wxDewF   = wxData?.dewp != null ? wxData.dewp * 9/5 + 32 : null;
+                const tempF = synTempF ?? wxTempF;
+                const dewF  = synDewF  ?? wxDewF;
+                console.log('Temp debug:', {synTempF, wxTempF, tempF, synDewF, wxDewF, dewF});
                 const visib = obs.visibility_value_1?.value ?? wxData?.visib ?? 10;
 
                 // RH from Magnus
@@ -963,7 +969,25 @@
                         const refKey = hazardMapping[h.id] || h.id.toUpperCase();
                         
                         // ✨ THIS IS THE MAGIC LINE: ZERO HARDCODING ✨
-                        const displayMetric = (refsThreats && refsThreats[refKey]) ? refsThreats[refKey].metric : 'None';
+                        // Fallback metrics if API doesn't return them
+                        const FALLBACK_METRICS = {
+                            'WIND':        {2:'30-45 mph', 3:'45-58 mph', 4:'58-65 mph', 5:'>65 mph'},
+                            'SNOW':        {2:'T-0.5"/hr', 3:'0.5-1"/hr', 4:'1-2"/hr',  5:'>2"/hr'},
+                            'HAIL':        {2:'<0.25"',    3:'0.25-0.5"', 4:'0.5-1"',   5:'>1"'},
+                            'LIGHTNING':   {2:'5-25%',     3:'25-50%',    4:'50-75%',    5:'>75%'},
+                            'VISIBILITY':  {2:'3-5 SM',    3:'1-3 SM',    4:'0.5-1 SM',  5:'<0.5 SM'},
+                            'COLD':        {2:'32-20°F',   3:'20-10°F',   4:'10-0°F',    5:'<0°F'},
+                            'HEAT':        {2:'90-95°F',   3:'95-100°F',  4:'100-105°F', 5:'>105°F'},
+                            'RAIN':        {2:'0.1-0.25"/hr',3:'0.25-0.5"/hr',4:'0.5-1"/hr',5:'>1"/hr'},
+                            'FZRA':        {2:'Trace',     3:'Trace-0.01"',4:'0.01-0.1"',5:'>0.1"'},
+                            'FLASH_FREEZE':{2:'Wet+<36°F', 3:'Wet+<32°F', 4:'Wet+<28°F', 5:'Wet+<25°F'},
+                        };
+                        const threatData = refsThreats && refsThreats[refKey];
+                        const threatLevel = threatData?.level || h.risk || 0;
+                        const displayMetric = threatData?.metric 
+                            || (FALLBACK_METRICS[refKey]?.[threatLevel]) 
+                            || (threatLevel > 0 ? FALLBACK_METRICS[refKey]?.[2] : 'None') 
+                            || 'None';
                         
                         const timeString = getHazardTimeString(h.id, refsTimeline);
 
