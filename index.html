@@ -120,9 +120,7 @@
                     <h2 class="font-bold text-sm tracking-wider uppercase text-slate-400">Threat Matrix</h2>
                 </div>
                 <div class="flex items-center gap-2">
-                    <div class="h-2 w-2 rounded-full bg-green-500 animate-pulse" id="live-dot"></div>
-                    <span class="text-[10px] uppercase text-green-500 font-bold tracking-widest" id="live-label">Live</span>
-                </div>
+                    
             </div>
             
             <div id="hazards-grid" class="grid grid-cols-5 gap-3 flex-grow h-full relative" style="z-index: 10;"></div>
@@ -250,7 +248,7 @@
                     <!-- Ceiling -->
                     <div class="asos-box">
                         <div class="flight-cat" id="fc-badge">--</div>
-                        <div class="asos-label">CEILING</div>
+                        <div class="asos-label">SKY CONDITION</div>
                         <div class="asos-value" id="sky-val">--</div>
                         <div class="asos-sub" id="sky-sub"></div>
                         <i class="ph-fill ph-cloud absolute bottom-2 right-2 text-3xl opacity-10"></i>
@@ -272,7 +270,7 @@
                     <!-- Present Weather / Lightning -->
                     <div class="asos-box" id="wx-card">
                         <div class="asos-label">PRESENT WX</div>
-                        <div id="wx-icons" style="font-size:1.4rem; margin-top:4px; min-height:28px;">--</div>
+                        <div class="asos-value" id="wx-icons" style="font-size:1.4rem; margin-top:4px; min-height:28px;">--</div>
                         <div id="wx-detail" class="asos-sub" style="margin-top:4px; font-size:0.65rem; line-height:1.3; color:#a1a1aa;"></div>
                         <div id="ltg-alert" style="display:none; margin-top:4px; background:#7c3aed22; border:1px solid #a855f7; border-radius:3px; padding:2px 6px; font-size:0.65rem; font-weight:800; color:#a855f7; font-family:monospace;">⚡ SUSPEND OPS</div>
                         <i class="ph-fill ph-cloud-lightning absolute bottom-2 right-2 text-3xl opacity-10"></i>
@@ -791,10 +789,7 @@
                 timeEl2.textContent = 'UPDATED JUST NOW';
             }
 
-            // Live indicator
-            const dot = document.getElementById('live-dot');
-            const label = document.getElementById('live-label');
-            if (dot && label) { dot.style.background = '#22c55e'; label.textContent = 'METAR LIVE'; label.style.color = '#22c55e'; }
+
         }
 
 
