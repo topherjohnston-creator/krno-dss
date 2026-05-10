@@ -396,56 +396,80 @@
         // --- FETCH METAR & ALERTS ---
         async function fetchMETAR() {
             try {
-                // aviationweather.gov JSON API — CORS-enabled, current data, includes rawOb
-                const resp = await fetch(
-                    'https://aviationweather.gov/api/data/metar?ids=KRNO&format=json&taf=false',
-                    { headers: { 'Accept': 'application/json' } }
-                );
-                if (!resp.ok) throw new Error(`aviationweather status ${resp.status}`);
-                const data = await resp.json();
-                if (!data || data.length === 0) throw new Error('No METAR data returned');
-                const m = data[0];  // most recent observation
-
-                // Parse visib — can be "10+", "1/2", "3/4", number
-                let visib = 10;
-                if (m.visib !== undefined && m.visib !== null) {
-                    const vs = String(m.visib);
-                    if (vs.includes('+')) visib = 10;
-                    else if (vs.includes('/')) {
-                        const parts = vs.split('/');
-                        visib = parseFloat(parts[0]) / parseFloat(parts[1]);
-                    } else visib = parseFloat(vs) || 10;
-                }
-
-                // RH using Magnus formula (T and Td in Celsius)
-                let rh = null;
-                if (m.temp != null && m.dewp != null) {
-                    const e  = Math.exp(17.625 * m.dewp / (243.04 + m.dewp));
-                    const es = Math.exp(17.625 * m.temp / (243.04 + m.temp));
-                    rh = Math.round(100 * e / es);
-                }
-
-                liveMetar = {
-                    wdir:  m.wdir ?? null,
-                    wspd:  m.wspd ?? 0,
-                    wgst:  m.wgst ?? 0,
-                    visib: visib,
-                    temp:  m.temp != null ? m.temp : null,   // Celsius
-                    dewp:  m.dewp != null ? m.dewp : null,   // Celsius
-                    rh:    rh,
-                    clouds: (m.clouds || []).map(c => ({
-                        cover: c.cover,
-                        base:  c.base != null ? Math.round(c.base) : null
-                    })).filter(c => c.cover && c.cover !== 'CLR' && c.cover !== 'SKC'),
-                    wxString: m.wxString || '',
-                    rawOb:    m.rawOb || '',
-                    reportTime: m.reportTime || null,
-                };
-                setStatus('✓ Source: aviationweather.gov', '#22c55e');
+                // Fetch raw METAR from tgftp via corsproxy.io (same source as original Netlify function)
+                const tgftpUrl = 'https://tgftp.nws.noaa.gov/data/observations/metar/stations/KRNO.TXT';
+                const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(tgftpUrl);
+                
+                const resp = await fetch(proxyUrl);
+                if (!resp.ok) throw new Error(`tgftp status ${resp.status}`);
+                const text = (await resp.text()).trim();
+                
+                // tgftp format: line 1 = timestamp, line 2 = raw METAR
+                const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+                const rawOb = lines.length >= 2 ? lines[1] : lines[0];
+                
+                // Parse raw METAR string
+                const parsed = parseRawMetar(rawOb);
+                liveMetar = { ...parsed, rawOb };
+                
+                setStatus('✓ Source: NOAA tgftp via corsproxy.io', '#22c55e');
                 applyMETARtoDisplay(liveMetar);
             } catch(e) {
                 setStatus(`✗ METAR Fetch failed: ${e.message}`, '#f44336');
             }
+        }
+
+        function parseRawMetar(raw) {
+            const m = { wdir: null, wspd: 0, wgst: 0, visib: 10, temp: null, dewp: null, rh: null, clouds: [], wxString: '', reportTime: null };
+            if (!raw) return m;
+
+            // Wind: 01004KT or 01004G12KT or VRB04KT or 00000KT
+            const windMatch = raw.match(/\b(VRB|\d{3})(\d{2,3})(G(\d{2,3}))?KT\b/);
+            if (windMatch) {
+                m.wdir = windMatch[1] === 'VRB' ? null : parseInt(windMatch[1]);
+                m.wspd = parseInt(windMatch[2]);
+                m.wgst = windMatch[4] ? parseInt(windMatch[4]) : 0;
+            }
+
+            // Visibility: 10SM, 1/2SM, 3/4SM, 1 1/2SM
+            const visMatch = raw.match(/\b(\d+)\s+(\d+)\/(\d+)SM\b|\b(\d+)\/(\d+)SM\b|\b(\d+)SM\b|\bM(\d+)\/(\d+)SM\b/);
+            if (visMatch) {
+                if (visMatch[1]) m.visib = parseInt(visMatch[1]) + parseInt(visMatch[2])/parseInt(visMatch[3]);
+                else if (visMatch[4]) m.visib = parseInt(visMatch[4])/parseInt(visMatch[5]);
+                else if (visMatch[6]) m.visib = Math.min(parseInt(visMatch[6]), 10);
+                else if (visMatch[7]) m.visib = parseInt(visMatch[7])/parseInt(visMatch[8]) * 0.5;
+            }
+
+            // Clouds: FEW018 BKN025 OVC060 SKC CLR
+            const cloudRe = /(FEW|SCT|BKN|OVC)(\d{3})([A-Z]*)?/g;
+            let cm;
+            while ((cm = cloudRe.exec(raw)) !== null) {
+                m.clouds.push({ cover: cm[1], base: parseInt(cm[2]) * 100 });
+            }
+
+            // Temp/Dew: 24/M06 or 15/09
+            const tdMatch = raw.match(/\b(M?\d{2})\/(M?\d{2})\b/);
+            if (tdMatch) {
+                m.temp = parseTD(tdMatch[1]);
+                m.dewp = parseTD(tdMatch[2]);
+                // RH using Magnus formula
+                const e  = Math.exp(17.625 * m.dewp / (243.04 + m.dewp));
+                const es = Math.exp(17.625 * m.temp / (243.04 + m.temp));
+                m.rh = Math.round(100 * e / es);
+            }
+
+            // Weather string
+            const wxCodes = raw.match(/\b(TS|RA|SN|FG|BR|HZ|DZ|GR|GS|PL|SQ|FC|\+RA|\+SN|-RA|-SN|RASN|SNRA|FZRA|FZDZ|BLSN|DRSN)\b/g);
+            if (wxCodes) m.wxString = wxCodes.join(' ');
+
+            return m;
+        }
+
+        function parseTD(s) {
+            if (!s) return null;
+            const neg = s.startsWith('M');
+            const val = parseInt(s.replace('M',''));
+            return neg ? -val : val;
         }
 
         async function fetchAlerts() {
@@ -558,8 +582,7 @@
                 document.getElementById('t-val').style.color = getColor('temp', tF);
                 document.getElementById('d-val').textContent = dC !== null ? Math.round(dF) : '--';
                 if (dC !== null) document.getElementById('d-val').style.color = getColor('dew', dF);
-                // RH using pre-calculated value or Magnus formula
-                const rh = m.rh != null ? m.rh : (dC !== null ? Math.round(100 * Math.exp(17.625*dC/(243.04+dC)) / Math.exp(17.625*tC/(243.04+tC))) : '--');
+                const rh = m.rh != null ? m.rh : '--';
                 const rhEl = document.querySelector('.asos-box:nth-child(4) .asos-sub');
                 if (rhEl) rhEl.textContent = `RH ${rh}%`;
             }
