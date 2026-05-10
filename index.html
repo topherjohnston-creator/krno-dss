@@ -398,11 +398,21 @@
             try {
                 // Fetch raw METAR from tgftp via corsproxy.io (same source as original Netlify function)
                 const tgftpUrl = 'https://tgftp.nws.noaa.gov/data/observations/metar/stations/KRNO.TXT';
-                const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(tgftpUrl);
                 
-                const resp = await fetch(proxyUrl);
-                if (!resp.ok) throw new Error(`tgftp status ${resp.status}`);
-                const text = (await resp.text()).trim();
+                // Try multiple CORS proxies in order
+                let text = null;
+                const proxies = [
+                    `https://corsproxy.io/?${encodeURIComponent(tgftpUrl)}`,
+                    `https://api.allorigins.win/raw?url=${encodeURIComponent(tgftpUrl)}`,
+                    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(tgftpUrl)}`,
+                ];
+                for (const proxyUrl of proxies) {
+                    try {
+                        const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(5000) });
+                        if (resp.ok) { text = (await resp.text()).trim(); if (text) break; }
+                    } catch(e) { continue; }
+                }
+                if (!text) throw new Error('All CORS proxies failed');
                 
                 // tgftp format: line 1 = timestamp, line 2 = raw METAR
                 const lines = text.split('\n').map(l => l.trim()).filter(l => l);
