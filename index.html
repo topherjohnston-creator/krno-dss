@@ -293,9 +293,6 @@
                 </div>
             </div>
         </div>
-            </div>
-        </div>
-
 
         <div class="panel p-4 flex flex-col" style="z-index: 20;">
             <div class="flex justify-between items-center mb-2">
@@ -649,11 +646,18 @@
                                     if (age <= 10) wgst = gustObs.value;
                                 }
                             }
-                            // 1-hour precip accumulation
+                            // 1-hour precip — only use if observation is within 2 hours
                             const precipObs = obs.precip_accum_one_hour_value_1;
-                            if (precipObs?.value != null) {
-                                window._precip1hr = precipObs.value;
-                                window._precipTime = precipObs.date_time;
+                            if (precipObs?.value != null && precipObs?.date_time) {
+                                const ageMins = (Date.now() - new Date(precipObs.date_time).getTime()) / 60000;
+                                if (ageMins <= 120) {
+                                    window._precip1hr = precipObs.value;
+                                } else {
+                                    // Stale observation — clock-hour has reset, show 0.00
+                                    window._precip1hr = 0;
+                                }
+                            } else {
+                                window._precip1hr = 0;
                             }
                         }
                     } catch(e) { /* silent fallback to raw METAR wind */ }
