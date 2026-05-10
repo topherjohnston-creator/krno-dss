@@ -396,46 +396,52 @@
         // --- FETCH METAR & ALERTS ---
         async function fetchMETAR() {
             try {
-                // Primary: api.weather.gov (CORS-safe, includes rawMessage)
-                const parsedResp = await fetch('https://api.weather.gov/stations/KRNO/observations/latest', {
-                    headers: { 'User-Agent': 'KRNO-DSS-Dashboard', 'Accept': 'application/geo+json' }
-                });
-                if (!parsedResp.ok) throw new Error(`NWS status ${parsedResp.status}`);
-                const data = await parsedResp.json();
-                const p = data.properties;
-                const msToKt = 1.94384;
-                const mToSm = 0.000621371;
+                // aviationweather.gov JSON API — CORS-enabled, current data, includes rawOb
+                const resp = await fetch(
+                    'https://aviationweather.gov/api/data/metar?ids=KRNO&format=json&taf=false',
+                    { headers: { 'Accept': 'application/json' } }
+                );
+                if (!resp.ok) throw new Error(`aviationweather status ${resp.status}`);
+                const data = await resp.json();
+                if (!data || data.length === 0) throw new Error('No METAR data returned');
+                const m = data[0];  // most recent observation
 
-                // Try aviationweather.gov for raw string — non-fatal fallback
-                let rawText = p.rawMessage || '';
-                try {
-                    const rawResp = await fetch(
-                        'https://aviationweather.gov/api/data/metar?ids=KRNO&format=raw',
-                        { headers: { 'Accept': 'text/plain' } }
-                    );
-                    if (rawResp.ok) {
-                        const t = (await rawResp.text()).trim();
-                        if (t && t.startsWith('KRNO')) rawText = t;
-                    }
-                } catch(e) { /* silent fallback to rawMessage */ }
+                // Parse visib — can be "10+", "1/2", "3/4", number
+                let visib = 10;
+                if (m.visib !== undefined && m.visib !== null) {
+                    const vs = String(m.visib);
+                    if (vs.includes('+')) visib = 10;
+                    else if (vs.includes('/')) {
+                        const parts = vs.split('/');
+                        visib = parseFloat(parts[0]) / parseFloat(parts[1]);
+                    } else visib = parseFloat(vs) || 10;
+                }
+
+                // RH using Magnus formula (T and Td in Celsius)
+                let rh = null;
+                if (m.temp != null && m.dewp != null) {
+                    const e  = Math.exp(17.625 * m.dewp / (243.04 + m.dewp));
+                    const es = Math.exp(17.625 * m.temp / (243.04 + m.temp));
+                    rh = Math.round(100 * e / es);
+                }
 
                 liveMetar = {
-                    wdir:  p.windDirection?.value ?? null,
-                    wspd:  p.windSpeed?.value != null ? Math.round(p.windSpeed.value * msToKt) : 0,
-                    wgst:  p.windGust?.value != null ? Math.round(p.windGust.value * msToKt) : 0,
-                    visib: p.visibility?.value != null ? Math.round(p.visibility.value * mToSm * 10) / 10 : 10,
-                    temp:  p.temperature?.value ?? null,
-                    dewp:  p.dewpoint?.value ?? null,
-                    clouds: (p.skyConditions || []).map(s => ({
-                        cover: s.skyCover,
-                        base: s.cloudBase?.value != null ? Math.round(s.cloudBase.value * 3.28084) : null
-                    })).filter(s => s.cover && s.cover !== 'CLR' && s.cover !== 'SKC'),
-                    wxString: '',
-                    rawOb: rawText,
-                    reportTime: p.timestamp || null,
+                    wdir:  m.wdir ?? null,
+                    wspd:  m.wspd ?? 0,
+                    wgst:  m.wgst ?? 0,
+                    visib: visib,
+                    temp:  m.temp != null ? m.temp : null,   // Celsius
+                    dewp:  m.dewp != null ? m.dewp : null,   // Celsius
+                    rh:    rh,
+                    clouds: (m.clouds || []).map(c => ({
+                        cover: c.cover,
+                        base:  c.base != null ? Math.round(c.base) : null
+                    })).filter(c => c.cover && c.cover !== 'CLR' && c.cover !== 'SKC'),
+                    wxString: m.wxString || '',
+                    rawOb:    m.rawOb || '',
+                    reportTime: m.reportTime || null,
                 };
-                const src = rawText.startsWith('KRNO') ? 'aviationweather.gov' : 'api.weather.gov';
-                setStatus(`✓ Source: ${src}`, '#22c55e');
+                setStatus('✓ Source: aviationweather.gov', '#22c55e');
                 applyMETARtoDisplay(liveMetar);
             } catch(e) {
                 setStatus(`✗ METAR Fetch failed: ${e.message}`, '#f44336');
@@ -548,10 +554,14 @@
             const dC = m.dewp !== undefined ? m.dewp : null;
             if (tC !== null) {
                 const tF = cToF(tC); const dF = dC !== null ? cToF(dC) : '--';
-                document.getElementById('t-val').textContent = tF;
+                document.getElementById('t-val').textContent = Math.round(tF);
                 document.getElementById('t-val').style.color = getColor('temp', tF);
-                document.getElementById('d-val').textContent = dF;
+                document.getElementById('d-val').textContent = dC !== null ? Math.round(dF) : '--';
                 if (dC !== null) document.getElementById('d-val').style.color = getColor('dew', dF);
+                // RH using pre-calculated value or Magnus formula
+                const rh = m.rh != null ? m.rh : (dC !== null ? Math.round(100 * Math.exp(17.625*dC/(243.04+dC)) / Math.exp(17.625*tC/(243.04+tC))) : '--');
+                const rhEl = document.querySelector('.asos-box:nth-child(4) .asos-sub');
+                if (rhEl) rhEl.textContent = `RH ${rh}%`;
             }
 
             const metarEl = document.getElementById('metar-string');
