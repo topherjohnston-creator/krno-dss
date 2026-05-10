@@ -396,13 +396,7 @@
         // --- FETCH METAR & ALERTS ---
         async function fetchMETAR() {
             try {
-                // Fetch raw METAR string from aviationweather.gov (CORS-enabled)
-                const rawResp = await fetch('https://aviationweather.gov/api/data/metar?ids=KRNO&format=raw', {
-                    headers: { 'Accept': 'text/plain' }
-                });
-                const rawText = rawResp.ok ? (await rawResp.text()).trim() : '';
-
-                // Fetch parsed data from api.weather.gov
+                // Primary: api.weather.gov (CORS-safe, includes rawMessage)
                 const parsedResp = await fetch('https://api.weather.gov/stations/KRNO/observations/latest', {
                     headers: { 'User-Agent': 'KRNO-DSS-Dashboard', 'Accept': 'application/geo+json' }
                 });
@@ -411,6 +405,19 @@
                 const p = data.properties;
                 const msToKt = 1.94384;
                 const mToSm = 0.000621371;
+
+                // Try aviationweather.gov for raw string — non-fatal fallback
+                let rawText = p.rawMessage || '';
+                try {
+                    const rawResp = await fetch(
+                        'https://aviationweather.gov/api/data/metar?ids=KRNO&format=raw',
+                        { headers: { 'Accept': 'text/plain' } }
+                    );
+                    if (rawResp.ok) {
+                        const t = (await rawResp.text()).trim();
+                        if (t && t.startsWith('KRNO')) rawText = t;
+                    }
+                } catch(e) { /* silent fallback to rawMessage */ }
 
                 liveMetar = {
                     wdir:  p.windDirection?.value ?? null,
@@ -424,10 +431,11 @@
                         base: s.cloudBase?.value != null ? Math.round(s.cloudBase.value * 3.28084) : null
                     })).filter(s => s.cover && s.cover !== 'CLR' && s.cover !== 'SKC'),
                     wxString: '',
-                    rawOb: rawText || p.rawMessage || '',
+                    rawOb: rawText,
                     reportTime: p.timestamp || null,
                 };
-                setStatus('✓ Source: aviationweather.gov + api.weather.gov', '#22c55e');
+                const src = rawText.startsWith('KRNO') ? 'aviationweather.gov' : 'api.weather.gov';
+                setStatus(`✓ Source: ${src}`, '#22c55e');
                 applyMETARtoDisplay(liveMetar);
             } catch(e) {
                 setStatus(`✗ METAR Fetch failed: ${e.message}`, '#f44336');
