@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KRNO Dark Ops (Synced METAR & Time)</title>
+    <title>KRNO DSS Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -165,7 +165,7 @@
                     <h2 class="font-bold text-base tracking-wider uppercase text-slate-300">CURRENT WEATHER OBSERVATIONS</h2>
                     <span class="text-xs font-mono text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded border border-purple-400/20">KRNO</span>
                  </div>
-                 <div class="text-[10px] text-slate-500 font-mono" id="asos-time">UPDATED 1m AGO</div>
+                 <div class="text-[10px] text-slate-500 font-mono" id="asos-time">--</div>
             </div>
             
             <div class="flex-grow flex flex-col gap-3">
@@ -194,9 +194,9 @@
                         
                         <div class="wind-stats pb-1">
                             <div class="wind-speed-row" id="wind-vals">
-                                <span id="w-spd">22</span>
+                                <span id="w-spd">--</span>
                                 <span class="text-xs text-gray-500 font-normal self-center">G</span>
-                                <span id="w-gst">32</span>
+                                <span id="w-gst">--</span>
                                 <span class="text-xs text-gray-500 font-normal self-center">KT</span>
                             </div>
                             <div class="wind-dir-text">250°</div>
@@ -205,23 +205,23 @@
                     
                     <div class="asos-box">
                         <div class="asos-label">VISIBILITY</div>
-                        <div class="asos-value text-white">10 SM</div>
-                        <div class="asos-sub font-bold text-gray-400">NONE</div>
+                        <div class="asos-value text-white" id="vis-val">--</div>
+                        <div class="asos-sub font-bold text-gray-400"></div>
                         <i class="ph-fill ph-eye absolute bottom-2 right-2 text-3xl opacity-10"></i>
                     </div>
 
                     <div class="asos-box">
-                        <div class="flight-cat">VFR</div>
+                        <div class="flight-cat">--</div>
                         <div class="asos-label">CEILING</div>
-                        <div class="asos-value" id="sky-val">BKN250</div>
-                        <div class="asos-sub">ACS LENT</div>
+                        <div class="asos-value" id="sky-val">--</div>
+                        <div class="asos-sub" id="sky-sub"></div>
                         <i class="ph-fill ph-cloud absolute bottom-2 right-2 text-3xl opacity-10"></i>
                     </div>
 
                     <div class="asos-box">
                         <div class="asos-label">TEMP / DEW</div>
-                        <div class="asos-value"><span id="t-val">55</span><span class="text-lg text-gray-500">/</span><span id="d-val">28</span><span class="text-sm align-top text-gray-500">°F</span></div>
-                        <div class="asos-sub" id="rh-val">RH 35%</div>
+                        <div class="asos-value"><span id="t-val">--</span><span class="text-lg text-gray-500">/</span><span id="d-val">--</span><span class="text-sm align-top text-gray-500">°F</span></div>
+                        <div class="asos-sub" id="rh-val">RH --%</div>
                         <i class="ph-fill ph-thermometer absolute bottom-2 right-2 text-3xl opacity-10"></i>
                     </div>
                 </div>
@@ -236,7 +236,7 @@
 
         <div class="panel p-4 flex flex-col" style="z-index: 20;">
             <div class="flex justify-between items-center mb-2">
-                <h2 id="wwa-title-text" class="font-bold text-base tracking-wider uppercase text-slate-300">Active Advisories</h2>
+                <h2 id="wwa-title-text" class="font-bold text-base tracking-wider uppercase text-slate-300">ACTIVE WARNINGS</h2>
             </div>
             
             <div class="h-24 border-b border-[#27272a] pb-3 mb-2 relative flex-shrink-0 flex">
@@ -305,8 +305,7 @@
             { id: 'Visibility', icon: "ph-eye", name: "Visibility", prep: "Driver disorientation" },
             { id: 'FZRA', icon: "ph-cloud-snow", name: "Freezing Rain", timelineName: "FRZ RAIN", prep: "Chemical treatment" },
             { id: 'FlashFreeze', icon: "ph-thermometer-cold", name: "Flash Freeze", timelineName: "FLASH FRZ", prep: "Chemical treatment efficacy" },
-            { id: 'Rain', icon: "ph-drop", name: "Rain", prep: "Drainage capacity" },
-            { id: 'Flooding', icon: "ph-waves", name: "Flooding", prep: "Drainage capacity" },
+            { id: 'Rain', icon: "ph-drop", name: "Rain/Flooding", timelineName: "RAIN", prep: "Drainage capacity" },
             { id: 'Temp', icon: "ph-thermometer", name: "COLD/HEAT", prep: "Frostbite/safety" }
         ];
 
@@ -342,7 +341,7 @@
         function getHazardTimeString(h_id, refsTimeline) {
             if (!refsTimeline) return "";
             
-            const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE', 'Flooding': 'RAIN' };
+            const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE' };
             const refKey = hazardMapping[h_id] || h_id.toUpperCase();
             const tData = refsTimeline[refKey];
             if(!tData) return "";
@@ -573,11 +572,40 @@
                 }
             }
 
-            const visEl = document.querySelector('.asos-box:nth-child(2) .asos-value');
+            const visEl = document.getElementById('vis-val') || document.querySelector('.asos-box:nth-child(2) .asos-value');
             if (visEl) {
                 const vis = m.visib || 10;
                 visEl.textContent = vis >= 10 ? '10+ SM' : `${vis} SM`;
                 visEl.style.color = vis < 1 ? '#f44336' : vis < 3 ? '#ff9800' : vis < 5 ? '#2196f3' : 'white';
+            }
+
+            // Ceiling display
+            const skyVal = document.getElementById('sky-val');
+            const skySub = document.getElementById('sky-sub');
+            if (skyVal) {
+                const clouds = m.clouds || [];
+                if (clouds.length === 0) {
+                    skyVal.textContent = 'CLR';
+                    skyVal.style.color = 'white';
+                    if (skySub) skySub.textContent = '';
+                } else {
+                    // Show lowest layer
+                    const lowest = clouds.reduce((a, b) => (a.base < b.base ? a : b));
+                    // Ceiling = lowest BKN or OVC
+                    const ceilLayer = clouds.find(c => ['BKN','OVC','VV'].includes(c.cover));
+                    const displayLayer = ceilLayer || lowest;
+                    const baseStr = displayLayer.base != null ? String(Math.round(displayLayer.base/100)).padStart(3,'0') : '???';
+                    skyVal.textContent = `${displayLayer.cover}${baseStr}`;
+                    skyVal.style.color = ceilLayer ? (ceilLayer.base < 1000 ? '#f44336' : ceilLayer.base < 3000 ? '#2196f3' : 'white') : '#71717a';
+                    // Sub — cloud type if present (ACSL, CB, TCU etc)
+                    if (skySub) {
+                        const allLayers = clouds.map(c => {
+                            const baseStr = c.base != null ? String(Math.round(c.base/100)).padStart(3,'0') : '';
+                            return `${c.cover}${baseStr}`;
+                        }).join(' ');
+                        skySub.textContent = clouds.length > 1 ? allLayers : '';
+                    }
+                }
             }
 
             const flightCat = getFlightCat(m);
@@ -608,7 +636,7 @@
         // --- GET REFS RISK LEVEL FROM TIMELINE JSON ---
         function getRiskForVariable(id, i, refsTimeline) {
             if (!refsTimeline) return 0; // Grey out if REFS failed
-            const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE', 'Flooding': 'RAIN' };
+            const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE' };
             const refKey = hazardMapping[id] || id.toUpperCase();
             
             const hourData = refsTimeline[refKey];
@@ -745,6 +773,18 @@
                 
                 if (threatsResp.status === 'fulfilled' && threatsResp.value.threats) {
                     refsThreats = threatsResp.value.threats;
+                    document.getElementById('refs-status')?.remove(); // clear no-backend message
+                } else if (!BACKEND_URL) {
+                    // No backend configured — show status in threat matrix
+                    const tmPanel = document.querySelector('#threat-matrix-container') || document.querySelector('.panel');
+                    if (tmPanel && !document.getElementById('refs-status')) {
+                        const msg = document.createElement('div');
+                        msg.id = 'refs-status';
+                        msg.style.cssText = 'position:absolute;bottom:8px;right:12px;font-size:10px;color:#71717a;font-family:monospace;';
+                        msg.textContent = 'REFS: No backend configured — run Colab notebook';
+                        tmPanel.style.position = 'relative';
+                        tmPanel.appendChild(msg);
+                    }
                 }
                 if (timelineResp.status === 'fulfilled' && timelineResp.value.timeline) {
                     refsTimeline = timelineResp.value.timeline;
@@ -760,7 +800,7 @@
                 if(grid) {
                     grid.innerHTML = '';
                     
-                    const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE', 'Flooding': 'RAIN' };
+                    const hazardMapping = { 'Temp': 'COLD_HEAT', 'FlashFreeze': 'FLASH_FREEZE' };
 
                     const hazards = HAZARD_DETAILS.map(h => {
                         let prob = 0;
