@@ -502,14 +502,25 @@
                 }
                 // Fall back to aviationweather.gov gust if Synoptic gust is stale
                 if (wgst === 0 && wxData?.wgst) wgst = wxData.wgst;
-                // Temperature — Synoptic returns °F, aviationweather returns °C
-                const synTempF = obs.air_temp_value_1?.value ?? null;
-                const synDewF  = obs.dew_point_temperature_value_1d?.value ?? null;
-                const wxTempF  = wxData?.temp != null ? wxData.temp * 9/5 + 32 : null;
-                const wxDewF   = wxData?.dewp != null ? wxData.dewp * 9/5 + 32 : null;
-                const tempF = synTempF ?? wxTempF;
-                const dewF  = synDewF  ?? wxDewF;
-                console.log('Temp debug:', {synTempF, wxTempF, tempF, synDewF, wxDewF, dewF});
+                // Temperature — parse from raw METAR string (most reliable)
+                // Format: 24/M06 = 24°C / -6°C, or M02/M08 = -2°C / -8°C
+                let tempC = null, dewC = null;
+                const tdMatch = rawText.match(/\b(M?\d{2})\/(M?\d{2})\b/);
+                if (tdMatch) {
+                    const parseTD = s => s.startsWith('M') ? -parseInt(s.slice(1)) : parseInt(s);
+                    tempC = parseTD(tdMatch[1]);
+                    dewC  = parseTD(tdMatch[2]);
+                }
+                // Fallback: Synoptic (°F) → convert to °C
+                if (tempC === null && obs.air_temp_value_1?.value != null)
+                    tempC = (obs.air_temp_value_1.value - 32) * 5/9;
+                if (dewC === null && obs.dew_point_temperature_value_1d?.value != null)
+                    dewC  = (obs.dew_point_temperature_value_1d.value - 32) * 5/9;
+                // Fallback: aviationweather.gov (already °C)
+                if (tempC === null && wxData?.temp != null) tempC = wxData.temp;
+                if (dewC  === null && wxData?.dewp != null) dewC  = wxData.dewp;
+                const tempF = tempC != null ? tempC * 9/5 + 32 : null;
+                const dewF  = dewC  != null ? dewC  * 9/5 + 32 : null;
                 const visib = obs.visibility_value_1?.value ?? wxData?.visib ?? 10;
 
                 // RH from Magnus
@@ -530,8 +541,8 @@
                 const obsTime = obs.air_temp_value_1?.date_time || wxData?.reportTime;
 
                 liveMetar = { wdir, wspd: wspd||0, wgst: wgst||0, visib: visib||10,
-                              temp: tempF != null ? (tempF-32)*5/9 : null,
-                              dewp: dewF  != null ? (dewF -32)*5/9 : null,
+                              temp: tempC,
+                              dewp: dewC,
                               rh, clouds, wxString, lightning: wxLtg, rawOb: rawText, reportTime: obsTime };
 
                 const src = token && synData ? 'Synoptic + aviationweather.gov' : 'aviationweather.gov';
