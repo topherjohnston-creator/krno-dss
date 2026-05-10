@@ -296,7 +296,7 @@
 
         <div class="panel p-4 flex flex-col" style="z-index: 20;">
             <div class="flex justify-between items-center mb-2">
-                <h2 id="wwa-title-text" class="font-bold text-base tracking-wider uppercase text-slate-300">ACTIVE WARNINGS</h2>
+                <h2 id="wwa-title-text" class="font-bold text-base tracking-wider uppercase text-slate-300">ACTIVE WATCHES, WARNINGS & ADVISORIES</h2>
             </div>
             
             <div class="h-24 border-b border-[#27272a] pb-3 mb-2 relative flex-shrink-0 flex">
@@ -998,7 +998,7 @@
             else if(eventStr.includes('advisory')) { wwaTitle = "ACTIVE ADVISORIES"; } 
             
             const titleEl = document.getElementById('wwa-title-text');
-            if(titleEl) titleEl.textContent = alerts.length > 0 ? wwaTitle : "NO ACTIVE ALERTS";
+            if(titleEl) titleEl.textContent = alerts.length > 0 ? wwaTitle : "NO ACTIVE WATCHES, WARNINGS, OR ADVISORIES";
 
             wwaContainer.innerHTML = ''; wwaTimeline.innerHTML = ''; wwaBg.innerHTML = ''; wwaLines.innerHTML = ''; wwaAxis.innerHTML = '';
 
@@ -1234,7 +1234,7 @@
                     labelsCtx.innerHTML = ''; barsCtx.innerHTML = ''; bgCtx.innerHTML = ''; linesCtx.innerHTML = ''; axisCtx.innerHTML = '';
 
                     for(let i=0; i<TOTAL_HOURS; i++) {
-                        const _hDate = new Date(now.getTime() + i*3600000);
+                        const _hDate = new Date(globalNow.getTime() + i*3600000);
                         const _sun = getSunriseSunsetUTC(_hDate);
                         const _hUTC = _hDate.getUTCHours() + _hDate.getUTCMinutes()/60;
                         const isDay = _sun.rise < _sun.set ? (_hUTC >= _sun.rise && _hUTC < _sun.set) : (_hUTC >= _sun.rise || _hUTC < _sun.set);
