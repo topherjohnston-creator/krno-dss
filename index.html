@@ -18,7 +18,7 @@
         .ops-card:hover { background: #3f3f46; border-color: #71717a; }
         
         /* TYPOGRAPHY */
-        .hazard-val { font-family: 'JetBrains Mono', monospace; font-size: 2.5rem; font-weight: 700; letter-spacing: -2px; line-height: 1; z-index: 10; position: relative; display: flex; align-items: flex-start; }
+        .hazard-val { font-family: 'JetBrains Mono', monospace; font-size: 3.2rem; font-weight: 700; letter-spacing: -2px; line-height: 1; z-index: 10; position: relative; display: flex; align-items: flex-start; }
         .percent-sign { font-size: 1.2rem; margin-top: 6px; opacity: 0.7; margin-left: 2px; }
         .hazard-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #a1a1aa; z-index: 10; position: relative; line-height: 1.1; }
         .hazard-criteria { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #71717a; margin-top: 2px; z-index: 10; position: relative; font-weight: 700; }
@@ -1003,7 +1003,10 @@
             wwaContainer.innerHTML = ''; wwaTimeline.innerHTML = ''; wwaBg.innerHTML = ''; wwaLines.innerHTML = ''; wwaAxis.innerHTML = '';
 
             for(let i=0; i<TOTAL_HOURS; i++) {
-                const isDay = (new Date(now.getTime() + i*3600000).getHours() >= 6 && new Date(now.getTime() + i*3600000).getHours() < 18);
+                const _hDate = new Date(now.getTime() + i*3600000);
+                const _sun = getSunriseSunsetUTC(_hDate);
+                const _hUTC = _hDate.getUTCHours() + _hDate.getUTCMinutes()/60;
+                const isDay = _sun.rise < _sun.set ? (_hUTC >= _sun.rise && _hUTC < _sun.set) : (_hUTC >= _sun.rise || _hUTC < _sun.set);
                 const classStr = isDay ? 'day-segment' : 'night-segment';
                 const width = 100 / TOTAL_HOURS;
                 wwaBg.innerHTML += `<div class="${classStr}" style="width: ${width}%;" onmouseenter="showHourTooltip(${i})" onmouseleave="hideTooltip()"></div>`;
@@ -1063,6 +1066,29 @@
             let hours = d.getHours(); const ampm = hours >= 12 ? 'P' : 'A';
             hours = hours % 12; hours = hours ? hours : 12;
             return `${hours}${ampm}`;
+        }
+
+        // Astronomical sunrise/sunset for KRNO (39.4986°N, 119.7681°W)
+        function getSunriseSunsetUTC(date) {
+            const lat = 39.4986, lon = -119.7681;
+            const rad = Math.PI / 180;
+            const JD = date.getTime() / 86400000 + 2440587.5;
+            const n  = JD - 2451545.0;
+            const L  = ((280.460 + 0.9856474 * n) % 360 + 360) % 360;
+            const g  = ((357.528 + 0.9856003 * n) % 360 + 360) % 360;
+            const lam = L + 1.915 * Math.sin(g*rad) + 0.020 * Math.sin(2*g*rad);
+            const eps = 23.439 - 0.0000004 * n;
+            const sinDec = Math.sin(eps*rad) * Math.sin(lam*rad);
+            const dec = Math.asin(sinDec) / rad;
+            const cosH = (Math.cos(90.833*rad) - Math.sin(lat*rad)*Math.sin(dec*rad))
+                       / (Math.cos(lat*rad) * Math.cos(dec*rad));
+            if (cosH > 1 || cosH < -1) return { rise: 6, set: 20 }; // fallback
+            const H = Math.acos(cosH) / rad;
+            const RA = Math.atan2(Math.cos(eps*rad)*Math.sin(lam*rad), Math.cos(lam*rad)) / rad / 15;
+            const EqT = L/15 - ((RA + 360) % 24);
+            const noon = 12 - EqT - lon/15;
+            return { rise: ((noon - H/15) % 24 + 24) % 24,
+                     set:  ((noon + H/15) % 24 + 24) % 24 };
         }
 
         async function initDashboard() {
@@ -1208,7 +1234,10 @@
                     labelsCtx.innerHTML = ''; barsCtx.innerHTML = ''; bgCtx.innerHTML = ''; linesCtx.innerHTML = ''; axisCtx.innerHTML = '';
 
                     for(let i=0; i<TOTAL_HOURS; i++) {
-                        const isDay = (new Date(globalNow.getTime() + i*3600000).getHours() >= 6 && new Date(globalNow.getTime() + i*3600000).getHours() < 18);
+                        const _hDate = new Date(now.getTime() + i*3600000);
+                        const _sun = getSunriseSunsetUTC(_hDate);
+                        const _hUTC = _hDate.getUTCHours() + _hDate.getUTCMinutes()/60;
+                        const isDay = _sun.rise < _sun.set ? (_hUTC >= _sun.rise && _hUTC < _sun.set) : (_hUTC >= _sun.rise || _hUTC < _sun.set);
                         const classStr = isDay ? 'day-segment' : 'night-segment';
                         const width = 100 / TOTAL_HOURS;
                         bgCtx.innerHTML += `<div class="${classStr}" style="width: ${width}%;" onmouseenter="showHourTooltip(${i})" onmouseleave="hideTooltip()"></div>`;
