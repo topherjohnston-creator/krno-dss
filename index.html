@@ -1275,12 +1275,17 @@
                             <div class="horizontal-guide"></div>
                             <div class="bar-container">`;
                         
-                        for (let i = 0; i < TOTAL_HOURS; i++) {
+                        // Offset bars by hours since cycle start so they align with the "from now" x-axis
+                        const cycleOffsetHrs = cycleStartTime ? (globalNow.getTime() - cycleStartTime) / 3600000 : 0;
+                        for (let fxx = 1; fxx <= TOTAL_HOURS; fxx++) {
+                            const hoursFromNow = fxx - cycleOffsetHrs;
+                            const i = fxx - 1; // 0-based index for getRiskForVariable
                             const risk = getRiskForVariable(h.id, i, refsTimeline);
                             const safeRisk = risk || 0;
                             const config = RISK_LEVELS[safeRisk] || RISK_LEVELS[0];
                             const width = 100 / TOTAL_HOURS;
-                            const left = (i / TOTAL_HOURS) * 100;
+                            const left = (hoursFromNow / TOTAL_HOURS) * 100;
+                            if (left < -width || left > 100) continue; // skip off-screen bars
                             rowHtml += `<div class="timeline-block" style="left: ${left}%; width: ${width}%; background-color: ${config.color};"></div>`;
                         }
 
