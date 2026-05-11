@@ -500,40 +500,49 @@
 
         function getHazardTimeString(h_id, refsTimeline) {
             if (!refsTimeline) return "";
-            
             const hazardMapping = { 'Cold': 'COLD', 'Heat': 'HEAT', 'FlashFreeze': 'FLASH_FREEZE' };
             const refKey = hazardMapping[h_id] || h_id.toUpperCase();
             const tData = refsTimeline[refKey];
-            if(!tData) return "";
+            if (!tData) return "";
 
+            const cycleOffsetHrs = cycleStartTime ? (globalNow.getTime() - cycleStartTime) / 3600000 : 0;
+            const nowMs = globalNow.getTime();
+
+            // Only look at FUTURE forecast hours
             let maxRisk = 0;
-            for(let i=1; i<=TOTAL_HOURS; i++) {
-                if(tData[i] && tData[i].risk > maxRisk) maxRisk = tData[i].risk;
+            for (let fxx = 1; fxx <= TOTAL_HOURS; fxx++) {
+                const hoursFromNow = fxx - cycleOffsetHrs;
+                if (hoursFromNow < 0) continue; // skip past hours
+                if (tData[fxx] && tData[fxx].risk > maxRisk) maxRisk = tData[fxx].risk;
             }
-            if(maxRisk < 1) return ""; 
+            if (maxRisk < 1) return "";
 
+            // Find the future window with max risk
             let start = -1, end = -1;
-            for(let i=1; i<=TOTAL_HOURS; i++) {
-                if(tData[i] && tData[i].risk === maxRisk) {
-                    if(start === -1) start = i - 1;
-                    end = i - 1;
+            for (let fxx = 1; fxx <= TOTAL_HOURS; fxx++) {
+                const hoursFromNow = fxx - cycleOffsetHrs;
+                if (hoursFromNow < 0) continue; // skip past
+                if (tData[fxx] && tData[fxx].risk === maxRisk) {
+                    if (start === -1) start = fxx;
+                    end = fxx;
                 }
             }
-            
-            // Use cycle start time as reference — fxx hours are from cycle time not now
+            if (start === -1) return "";
+
             const ref = cycleStartTime ? cycleStartTime : globalNow.getTime();
-            const d1 = new Date(ref + start*3600000);
-            const d2 = new Date(ref + end*3600000);
-            
+            const d1 = new Date(ref + start * 3600000);
+            const d2 = new Date(ref + end   * 3600000);
+
             const day1 = d1.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
             const h1 = d1.getHours(); const a1 = h1 >= 12 ? 'P' : 'A'; const hr1 = h1 % 12 || 12;
             const day2 = d2.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
             const h2 = d2.getHours(); const a2 = h2 >= 12 ? 'P' : 'A'; const hr2 = h2 % 12 || 12;
 
-            if(day1 === day2 && hr1 === hr2 && a1 === a2) return `${day1} ${hr1}${a1}`;
-            if(day1 === day2) return `${day1} ${hr1}${a1} - ${hr2}${a2}`;
+            if (day1 === day2 && hr1 === hr2 && a1 === a2) return `${day1} ${hr1}${a1}`;
+            if (day1 === day2) return `${day1} ${hr1}${a1} - ${hr2}${a2}`;
             return `${day1} ${hr1}${a1} - ${day2} ${hr2}${a2}`;
         }
+
 
         function getAlertConfig(eventStr) {
             const e = eventStr.toLowerCase();
@@ -1094,6 +1103,128 @@
                      set:  ((noon + H/15) % 24 + 24) % 24 };
         }
 
+
+        // ── DESI Colormaps for Timeline (ensemble mean display) ──────────────
+        const DESI_CMAPS = {
+            WIND: [  // mph
+                {max:5,   rgb:[200,220,220]}, {max:10,  rgb:[100,200,210]},
+                {max:15,  rgb:[50,180,190]},  {max:20,  rgb:[30,160,170]},
+                {max:25,  rgb:[20,140,150]},  {max:30,  rgb:[240,220,20]},
+                {max:40,  rgb:[240,160,20]},  {max:50,  rgb:[220,60,20]},
+                {max:60,  rgb:[180,20,20]},   {max:70,  rgb:[160,20,80]},
+                {max:80,  rgb:[180,20,180]},  {max:90,  rgb:[200,100,200]},
+                {max:100, rgb:[160,0,220]},   {max:999, rgb:[120,0,180]},
+            ],
+            VISIBILITY: [  // SM
+                {max:0.1,  rgb:[20,0,40]},    {max:0.25, rgb:[80,0,120]},
+                {max:0.5,  rgb:[150,0,180]},  {max:1,    rgb:[200,0,60]},
+                {max:2,    rgb:[220,100,80]}, {max:3,    rgb:[240,210,20]},
+                {max:4,    rgb:[230,230,150]},{max:5,    rgb:[200,210,200]},
+                {max:10,   rgb:[180,190,180]},{max:999,  rgb:[220,225,220]},
+            ],
+            SNOW: [  // in/hr
+                {max:0.1,  rgb:[200,230,240]},{max:0.2,  rgb:[150,200,230]},
+                {max:0.3,  rgb:[100,170,220]},{max:0.5,  rgb:[60,130,200]},
+                {max:0.75, rgb:[30,90,180]},  {max:1.0,  rgb:[20,60,160]},
+                {max:1.25, rgb:[30,140,80]},  {max:1.5,  rgb:[100,180,50]},
+                {max:1.75, rgb:[200,210,20]}, {max:2.0,  rgb:[230,140,20]},
+                {max:2.5,  rgb:[210,50,20]},  {max:3.0,  rgb:[150,20,20]},
+                {max:999,  rgb:[100,10,10]},
+            ],
+            RAIN: [  // in/hr
+                {max:0.05, rgb:[150,220,220]},{max:0.15, rgb:[50,180,160]},
+                {max:0.25, rgb:[20,150,80]},  {max:0.75, rgb:[100,180,30]},
+                {max:1.5,  rgb:[230,200,20]}, {max:2.5,  rgb:[230,100,20]},
+                {max:3.5,  rgb:[200,30,30]},  {max:5.0,  rgb:[100,0,180]},
+                {max:999,  rgb:[60,0,130]},
+            ],
+            FZRA: [  // categorical mean (0-1)
+                {max:0.05, rgb:[20,20,60]},   {max:0.1,  rgb:[30,30,120]},
+                {max:0.2,  rgb:[60,60,180]},  {max:0.3,  rgb:[100,20,200]},
+                {max:999,  rgb:[160,0,220]},
+            ],
+            LIGHTNING: [  // flashes/km2/5min
+                {max:0.01, rgb:[160,160,160]},{max:0.02, rgb:[200,180,120]},
+                {max:0.5,  rgb:[230,180,20]}, {max:1,    rgb:[230,100,20]},
+                {max:2,    rgb:[200,30,30]},  {max:3,    rgb:[180,20,100]},
+                {max:4,    rgb:[180,20,180]}, {max:5,    rgb:[160,0,220]},
+                {max:999,  rgb:[120,0,200]},
+            ],
+            HAIL: [  // inches
+                {max:0.1,  rgb:[200,230,240]},{max:0.25, rgb:[100,180,220]},
+                {max:0.5,  rgb:[50,130,200]}, {max:1.0,  rgb:[200,200,20]},
+                {max:999,  rgb:[220,60,20]},
+            ],
+            // Exact DESI 2m Temperature colormap (°F)
+            COLD: [
+                {max:-55, rgb:[145,0,63]},    {max:-50, rgb:[206,18,86]},
+                {max:-45, rgb:[231,41,138]},  {max:-40, rgb:[223,101,176]},
+                {max:-35, rgb:[255,115,223]}, {max:-30, rgb:[255,190,232]},
+                {max:-25, rgb:[255,255,255]}, {max:-20, rgb:[218,218,235]},
+                {max:-15, rgb:[188,189,220]}, {max:-10, rgb:[158,154,200]},
+                {max:-5,  rgb:[117,107,177]}, {max:0,   rgb:[84,39,143]},
+                {max:5,   rgb:[13,0,125]},    {max:10,  rgb:[13,61,156]},
+                {max:15,  rgb:[0,102,194]},   {max:20,  rgb:[41,158,255]},
+                {max:25,  rgb:[74,199,255]},  {max:30,  rgb:[115,215,255]},
+                {max:35,  rgb:[173,255,255]}, {max:40,  rgb:[48,207,194]},
+                {max:45,  rgb:[0,153,150]},   {max:50,  rgb:[18,87,87]},
+                {max:55,  rgb:[6,109,44]},    {max:60,  rgb:[49,163,84]},
+                {max:65,  rgb:[116,196,118]}, {max:70,  rgb:[161,217,155]},
+                {max:75,  rgb:[211,255,190]}, {max:80,  rgb:[255,255,179]},
+                {max:85,  rgb:[255,237,160]}, {max:90,  rgb:[254,209,118]},
+                {max:95,  rgb:[254,174,42]},  {max:100, rgb:[253,141,60]},
+                {max:105, rgb:[252,78,42]},   {max:110, rgb:[227,26,28]},
+                {max:115, rgb:[177,0,38]},    {max:120, rgb:[128,0,38]},
+                {max:125, rgb:[89,0,66]},     {max:999, rgb:[40,0,40]},
+            ],
+            HEAT: [  // Same DESI temp colormap
+                {max:-55, rgb:[145,0,63]},    {max:-50, rgb:[206,18,86]},
+                {max:-45, rgb:[231,41,138]},  {max:-40, rgb:[223,101,176]},
+                {max:-35, rgb:[255,115,223]}, {max:-30, rgb:[255,190,232]},
+                {max:-25, rgb:[255,255,255]}, {max:-20, rgb:[218,218,235]},
+                {max:-15, rgb:[188,189,220]}, {max:-10, rgb:[158,154,200]},
+                {max:-5,  rgb:[117,107,177]}, {max:0,   rgb:[84,39,143]},
+                {max:5,   rgb:[13,0,125]},    {max:10,  rgb:[13,61,156]},
+                {max:15,  rgb:[0,102,194]},   {max:20,  rgb:[41,158,255]},
+                {max:25,  rgb:[74,199,255]},  {max:30,  rgb:[115,215,255]},
+                {max:35,  rgb:[173,255,255]}, {max:40,  rgb:[48,207,194]},
+                {max:45,  rgb:[0,153,150]},   {max:50,  rgb:[18,87,87]},
+                {max:55,  rgb:[6,109,44]},    {max:60,  rgb:[49,163,84]},
+                {max:65,  rgb:[116,196,118]}, {max:70,  rgb:[161,217,155]},
+                {max:75,  rgb:[211,255,190]}, {max:80,  rgb:[255,255,179]},
+                {max:85,  rgb:[255,237,160]}, {max:90,  rgb:[254,209,118]},
+                {max:95,  rgb:[254,174,42]},  {max:100, rgb:[253,141,60]},
+                {max:105, rgb:[252,78,42]},   {max:110, rgb:[227,26,28]},
+                {max:115, rgb:[177,0,38]},    {max:120, rgb:[128,0,38]},
+                {max:125, rgb:[89,0,66]},     {max:999, rgb:[40,0,40]},
+            ],
+            FLASH_FREEZE: [  // wet bulb °F — impact table thresholds
+                // <25F=L5 extreme, 25-28=L4 major, 28-32=L3 moderate, 32-36=L2 minor
+                {max:25,   rgb:[150,0,180]},   // extreme — deep purple
+                {max:28,   rgb:[200,0,60]},    // major — red
+                {max:32,   rgb:[230,100,20]},  // moderate — orange
+                {max:36,   rgb:[240,210,20]},  // minor — yellow
+                {max:40,   rgb:[160,210,230]}, // below concern — light blue
+                {max:999,  rgb:[200,230,200]}, // warm — pale green
+            ],
+        };
+
+        function deciColormap(key, val) {
+            const cmap = DESI_CMAPS[key];
+            if (!cmap || val === null || val === undefined || isNaN(val)) return null;
+            for (const entry of cmap) {
+                if (val <= entry.max) return `rgb(${entry.rgb.join(',')})`;
+            }
+            return `rgb(${cmap[cmap.length-1].rgb.join(',')})`;
+        }
+
+        // Units label for tooltip
+        const MEAN_UNITS = {
+            WIND:'mph', SNOW:'in/hr', HAIL:'in', LIGHTNING:'fl/km²/5m',
+            VISIBILITY:'SM', FZRA:'cat', FLASH_FREEZE:'Tw°F',
+            RAIN:'in/hr', COLD:'°F', HEAT:'°F',
+        };
+
         async function initDashboard() {
             try {
                 await loadConfig();
@@ -1279,14 +1410,21 @@
                         const cycleOffsetHrs = cycleStartTime ? (globalNow.getTime() - cycleStartTime) / 3600000 : 0;
                         for (let fxx = 1; fxx <= TOTAL_HOURS; fxx++) {
                             const hoursFromNow = fxx - cycleOffsetHrs;
-                            const i = fxx - 1; // 0-based index for getRiskForVariable
-                            const risk = getRiskForVariable(h.id, i, refsTimeline);
-                            const safeRisk = risk || 0;
-                            const config = RISK_LEVELS[safeRisk] || RISK_LEVELS[0];
                             const width = 100 / TOTAL_HOURS;
                             const left = (hoursFromNow / TOTAL_HOURS) * 100;
-                            if (left < -width || left > 100) continue; // skip off-screen bars
-                            rowHtml += `<div class="timeline-block" style="left: ${left}%; width: ${width}%; background-color: ${config.color};"></div>`;
+                            if (left < -width || left > 100) continue;
+
+                            // Get mean value and color from DESI colormap
+                            const refKey2 = ({Cold:'COLD',Heat:'HEAT',FlashFreeze:'FLASH_FREEZE'})[h.id] || h.id.toUpperCase();
+                            const hourData = refsTimeline?.[refKey2]?.[String(fxx)] || refsTimeline?.[refKey2]?.[fxx];
+                            const meanVal = hourData?.mean ?? null;
+                            const meanColor = deciColormap(refKey2, meanVal);
+                            const units = MEAN_UNITS[refKey2] || '';
+                            const tipVal = meanVal !== null ? `${meanVal} ${units}` : 'no data';
+                            const bgColor = meanColor || '#1c1c1e';
+                            const opacity = meanVal !== null && meanVal > 0 ? 1.0 : 0.15;
+
+                            rowHtml += `<div class="timeline-block" title="${tipVal}" style="left: ${left}%; width: ${width}%; opacity: ${opacity}; background-color: ${bgColor};"></div>`;
                         }
 
                         rowHtml += `</div></div>`;
