@@ -520,8 +520,10 @@
                 }
             }
             
-            const d1 = new Date(globalNow.getTime() + start*3600000);
-            const d2 = new Date(globalNow.getTime() + end*3600000);
+            // Use cycle start time as reference — fxx hours are from cycle time not now
+            const ref = cycleStartTime ? cycleStartTime : globalNow.getTime();
+            const d1 = new Date(ref + start*3600000);
+            const d2 = new Date(ref + end*3600000);
             
             const day1 = d1.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
             const h1 = d1.getHours(); const a1 = h1 >= 12 ? 'P' : 'A'; const hr1 = h1 % 12 || 12;
@@ -546,6 +548,7 @@
         // --- DATA STATE ---
         let liveMetar = null;
         let liveAlerts = [];
+        let cycleStartTime = null; // UTC ms of model cycle start
 
         function setStatus(msg, color) {
             const el = document.getElementById('fetch-status');
