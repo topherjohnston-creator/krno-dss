@@ -1116,7 +1116,11 @@
                 
                 if (threatsResp.status === 'fulfilled' && threatsResp.value.threats) {
                     refsThreats = threatsResp.value.threats;
-                    document.getElementById('refs-status')?.remove(); // clear no-backend message
+                    document.getElementById('refs-status')?.remove();
+                    // Parse cycle start time e.g. "2026-05-10 18Z"
+                    const cycleStr = threatsResp.value.cycle || '';
+                    const cm = cycleStr.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2})Z/);
+                    if (cm) cycleStartTime = Date.UTC(+cm[1], +cm[2]-1, +cm[3], +cm[4], 0, 0);
                 } else if (!BACKEND_URL) {
                     // No backend configured — show status in threat matrix
                     const tmPanel = document.querySelector('#threat-matrix-container') || document.querySelector('.panel');
@@ -1169,7 +1173,7 @@
                         
                         const borderColor = config.color;
                         const valColor = isGrey ? '#52525b' : '#ffffff'; 
-                        const displayVal = `${h.prob}`;
+                        const displayVal = `${Math.round((h.prob || 0) / 5) * 5}`;
                         
                         const refKey = hazardMapping[h.id] || h.id.toUpperCase();
                         
