@@ -25,6 +25,8 @@ from datetime import datetime, timezone, timedelta
 from scipy.stats import norm
 import numpy as np
 
+KT_TO_MPH = 1.15078  # nautical miles per hour → statute mph
+
 STATION    = "KRNO"
 NOMADS_NBM = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/blend/prod"
 
@@ -204,7 +206,6 @@ def parse_nbp(sec):
             r.update({'TMAX_D2_STD': max(txnsd[2], txnsd[3]),
                       'TMIN_D2_STD': min(txnsd[2], txnsd[3])})
     # G24P in KNOTS -- convert to mph
-    KT_TO_MPH = 1.15078
     for pct, row in [(10,g24p1),(20,g24p2),(50,g24p5),(70,g24p7),(90,g24p9)]:
         if len(row) >= 1: r[f'G24_D1_P{pct}'] = round(row[0] * KT_TO_MPH, 1)
         if len(row) >= 2: r[f'G24_D2_P{pct}'] = round(row[1] * KT_TO_MPH, 1)
