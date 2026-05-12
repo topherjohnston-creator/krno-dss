@@ -121,7 +121,7 @@ def parse_nbh(sec):
             utc_row = [int(x) for x in re.findall(r'\d+', line[4:])]
             break
     rows = {}
-    for el in ['TMP','TSD','DPT','DSD','WDR','WSP','GST','GSD','P01','Q01','T01','VIS','MVV','IFV','LIV']:
+    for el in ['TMP','TSD','DPT','DSD','WDR','WSP','GST','GSD','SKY','P01','Q01','T01','VIS','MVV','IFV','LIV']:
         v = parse_row(el, sec)
         if v: rows[el] = v
     data = {}
@@ -143,7 +143,7 @@ def parse_nbs(sec):
             fhr_row = [int(x) for x in re.findall(r'\d+', line[4:])]
             break
     rows = {}
-    for el in ['TMP','TSD','DPT','DSD','WDR','WSP','GST','GSD','P06','Q06','S06','ZR6','T06']:
+    for el in ['TMP','TSD','DPT','DSD','WDR','WSP','GST','GSD','SKY','P06','Q06','S06','ZR6','T06']:
         v = parse_row(el, sec)
         if v: rows[el] = v
     data = {}
@@ -271,6 +271,7 @@ def make_blocks(nbh, nbs):
             'start_fxx': s, 'end_fxx': e, 'utc_start': utc_start,
             'TMP': av('TMP'), 'TSD': av('TSD'), 'DPT': av('DPT'),
             'WDR': mx('WDR'), 'WSP': mx('WSP'),  # wind dir (tens of deg) & speed (mph)
+            'SKY': av('SKY'),  # cloud coverage %
             'GST': mx('GST'), 'GSD': av('GSD'),
             'T01': mx('T01') if nbh_hrs else _nbs('T06'),
             'P01': mx('P01') if nbh_hrs else nbs_p01,
@@ -340,9 +341,12 @@ def compute_block(block, bi, nbp):
 
     # -- VISIBILITY -----------------------------------------------------------
     liv = block.get('LIV') or 0; ifv = block.get('IFV') or 0; mvv = block.get('MVV') or 0
-    if liv >= 1: vp, vl = liv, 4
-    elif ifv >= 1: vp, vl = ifv, 3
-    elif mvv >= 1: vp, vl = mvv, 2
+    # Require >=5% probability before registering a visibility hazard.
+    # MVV/IFV/LIV=1 (single percent) generates MINOR via 2D matrix but is
+    # operationally meaningless at that probability — suppress it.
+    if liv >= 5: vp, vl = liv, 4
+    elif ifv >= 5: vp, vl = ifv, 3
+    elif mvv >= 5: vp, vl = mvv, 2
     else: vp, vl = 0, 0
     h["VISIBILITY"] = {"prob": vp, "risk": risk_matrix(vp, vl), "level": vl,
                        "color": RISK_C[risk_matrix(vp, vl)]}
@@ -513,8 +517,22 @@ def main():
         json.dump({"threats": threats, "cycle": cycle_label,
                    "cycle_utc_iso": cycle_utc_iso, "last_updated": now_iso},
                   f, default=serialize)
+    # Raw NBH hourly data for obs-panel forecast sparklines (1-hr resolution)
+    nbh_hourly = []
+    for fxx in range(1, 26):
+        h = nbh.get(fxx, {})
+        nbh_hourly.append({
+            'fxx': fxx, 'utc': h.get('utc_hour'),
+            'TMP': h.get('TMP'), 'DPT': h.get('DPT'),
+            'WDR': h.get('WDR'), 'WSP': h.get('WSP'), 'GST': h.get('GST'),
+            'VIS': h.get('VIS'), 'SKY': h.get('SKY'),
+            'P01': h.get('P01'), 'Q01': h.get('Q01'), 'T01': h.get('T01'),
+            'MVV': h.get('MVV'), 'IFV': h.get('IFV'),
+        })
+
     with open('timeline.json', 'w') as f:
         json.dump({"blocks": blocks, "block_hazards": block_hazards,
+                   "nbh_hourly": nbh_hourly,
                    "cycle": cycle_label, "last_updated": now_iso},
                   f, default=serialize)
 
