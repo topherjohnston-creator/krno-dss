@@ -163,24 +163,46 @@ def parse_nbp(sec):
     G24P values are in KNOTS -- converted to mph on storage.
     TXNMN column order is cycle-dependent; use min/max of each pair.
     """
-    txnmn = parse_row('TXNMN', sec); txnsd = parse_row('TXNSD', sec)
     g24p1 = parse_row('G24P1', sec); g24p2 = parse_row('G24P2', sec)
     g24p5 = parse_row('G24P5', sec); g24p7 = parse_row('G24P7', sec)
     g24p9 = parse_row('G24P9', sec)
+    # TXNP percentile rows -- used for temperature Gaussian (more accurate than TXNMN/TXNSD)
+    # TXNP1=10th pctile, TXNP5=50th pctile (median), TXNP9=90th pctile
+    # Col order in NBP: alternates MinT/MaxT per 12z period; same cycle-dependency as TXNMN.
+    # Use max()=MaxT, min()=MinT within each pair -- robust to cycle ordering.
+    txnp1 = parse_row('TXNP1', sec)  # 10th percentile
+    txnp5 = parse_row('TXNP5', sec)  # 50th percentile (median)
+    txnp9 = parse_row('TXNP9', sec)  # 90th percentile
     r = {}
-    # TXNMN col order depends on cycle: max()=MaxT, min()=MinT regardless of order
-    if len(txnmn) >= 2:
-        r.update({'TMAX_D1': max(txnmn[0], txnmn[1]),
-                  'TMIN_N1': min(txnmn[0], txnmn[1])})
-    if len(txnmn) >= 4:
-        r.update({'TMAX_D2': max(txnmn[2], txnmn[3]),
-                  'TMIN_N2': min(txnmn[2], txnmn[3])})
-    if len(txnsd) >= 2:
-        r.update({'TMAX_D1_STD': max(txnsd[0], txnsd[1]),
-                  'TMIN_N1_STD': min(txnsd[0], txnsd[1])})
-    if len(txnsd) >= 4:
-        r.update({'TMAX_D2_STD': max(txnsd[2], txnsd[3]),
-                  'TMIN_N2_STD': min(txnsd[2], txnsd[3])})
+    # Temperature: prefer TXNP percentile approach (matches histogram values exactly).
+    # Falls back to TXNMN/TXNSD if TXNP rows are absent.
+    if len(txnp5) >= 2:
+        r.update({'TMAX_D1_P10': min(txnp1[0], txnp1[1]) if len(txnp1)>=2 else None,
+                  'TMAX_D1_P50': max(txnp5[0], txnp5[1]),
+                  'TMAX_D1_P90': max(txnp9[0], txnp9[1]) if len(txnp9)>=2 else None,
+                  'TMIN_D1_P10': min(txnp1[0], txnp1[1]) if len(txnp1)>=2 else None,
+                  'TMIN_D1_P50': min(txnp5[0], txnp5[1]),
+                  'TMIN_D1_P90': max(txnp9[0], txnp9[1]) if len(txnp9)>=2 else None})
+    if len(txnp5) >= 4:
+        r.update({'TMAX_D2_P10': min(txnp1[2], txnp1[3]) if len(txnp1)>=4 else None,
+                  'TMAX_D2_P50': max(txnp5[2], txnp5[3]),
+                  'TMAX_D2_P90': max(txnp9[2], txnp9[3]) if len(txnp9)>=4 else None,
+                  'TMIN_D2_P50': min(txnp5[2], txnp5[3])})
+    # Fallback: TXNMN/TXNSD if no TXNP data
+    if 'TMAX_D1_P50' not in r:
+        txnmn = parse_row('TXNMN', sec); txnsd = parse_row('TXNSD', sec)
+        if len(txnmn) >= 2:
+            r.update({'TMAX_D1_P50': max(txnmn[0], txnmn[1]),
+                      'TMIN_D1_P50': min(txnmn[0], txnmn[1])})
+        if len(txnmn) >= 4:
+            r.update({'TMAX_D2_P50': max(txnmn[2], txnmn[3]),
+                      'TMIN_D2_P50': min(txnmn[2], txnmn[3])})
+        if len(txnsd) >= 2:
+            r.update({'TMAX_D1_STD': max(txnsd[0], txnsd[1]),
+                      'TMIN_D1_STD': min(txnsd[0], txnsd[1])})
+        if len(txnsd) >= 4:
+            r.update({'TMAX_D2_STD': max(txnsd[2], txnsd[3]),
+                      'TMIN_D2_STD': min(txnsd[2], txnsd[3])})
     # G24P in KNOTS -- convert to mph
     KT_TO_MPH = 1.15078
     for pct, row in [(10,g24p1),(20,g24p2),(50,g24p5),(70,g24p7),(90,g24p9)]:
@@ -343,8 +365,17 @@ def compute_block(block, bi, nbp):
                  "color": RISK_C[risk_matrix(rp, rl)]}
 
     # -- COLD (scan mild->extreme, break on first miss) -----------------------
-    mint = nbp.get("TMIN_N2" if d2 else "TMIN_N1")
-    mint_std = nbp.get("TMIN_N2_STD" if d2 else "TMIN_N1_STD") or 3
+    # Use TXNP percentiles for accurate distribution; fall back to TXNMN/TXNSD.
+    day = "D2" if d2 else "D1"
+    mint_p50 = nbp.get(f"TMIN_{day}_P50")
+    mint_p10 = nbp.get(f"TMIN_{day}_P10")
+    mint_p90 = nbp.get(f"TMIN_{day}_P90")
+    if mint_p50 is not None:
+        mint, mint_std = pct_to_gaussian(mint_p10, mint_p50, mint_p90)
+        mint_std = mint_std or 3
+    else:
+        mint = nbp.get(f"TMIN_D{'2' if d2 else '1'}_P50")  # may still be None
+        mint_std = nbp.get(f"TMIN_D{'2' if d2 else '1'}_STD") or 3
     cp, cl = 0.0, 0
     if mint:
         for t, l in [(40,2),(32,3),(20,4),(0,5)]:
@@ -355,8 +386,16 @@ def compute_block(block, bi, nbp):
                  "color": RISK_C[risk_matrix(cp, cl)]}
 
     # -- HEAT (scan mild->extreme, break on first miss) -----------------------
-    maxt = nbp.get("TMAX_D2" if d2 else "TMAX_D1")
-    maxt_std = nbp.get("TMAX_D2_STD" if d2 else "TMAX_D1_STD") or 3
+    # Use TXNP percentiles for accurate distribution; fall back to TXNMN/TXNSD.
+    maxt_p50 = nbp.get(f"TMAX_{day}_P50")
+    maxt_p10 = nbp.get(f"TMAX_{day}_P10")
+    maxt_p90 = nbp.get(f"TMAX_{day}_P90")
+    if maxt_p50 is not None:
+        maxt, maxt_std = pct_to_gaussian(maxt_p10, maxt_p50, maxt_p90)
+        maxt_std = maxt_std or 3
+    else:
+        maxt = nbp.get(f"TMAX_D{'2' if d2 else '1'}_P50")
+        maxt_std = nbp.get(f"TMAX_D{'2' if d2 else '1'}_STD") or 3
     hp, hl = 0.0, 0
     if maxt:
         for t, l in [(90,2),(95,3),(100,4),(105,5)]:
@@ -372,6 +411,9 @@ def compute_block(block, bi, nbp):
     else:
         temp = dict(h["COLD"]); temp["temp_type"] = "cold"
     h["TEMPERATURE"] = temp
+    # Remove internal COLD/HEAT — only TEMPERATURE appears in output.
+    # Frontend timeline and cards should show TEMPERATURE row only (not separate cold/heat).
+    del h["COLD"]; del h["HEAT"]
 
     return h
 
@@ -406,8 +448,9 @@ def main():
         for day in ['D1', 'D2']:
             pcts = {p: nbp.get(f'G24_{day}_P{p}') for p in [10, 50, 90]}
             print(f"  G24 {day} (mph): P10={pcts[10]}  P50={pcts[50]}  P90={pcts[90]}")
-        print(f"  MaxT D1={nbp.get('TMAX_D1')}F D2={nbp.get('TMAX_D2')}F  "
-              f"MinT N1={nbp.get('TMIN_N1')}F N2={nbp.get('TMIN_N2')}F")
+        print(f"  MaxT D1 P50={nbp.get('TMAX_D1_P50')}F P90={nbp.get('TMAX_D1_P90')}F  "
+              f"D2 P50={nbp.get('TMAX_D2_P50')}F P90={nbp.get('TMAX_D2_P90')}F")
+        print(f"  MinT N1 P50={nbp.get('TMIN_D1_P50')}F  N2 P50={nbp.get('TMIN_D2_P50')}F")
 
     blocks = make_blocks(nbh, nbs)
     block_hazards = [compute_block(b, i, nbp) for i, b in enumerate(blocks)]
