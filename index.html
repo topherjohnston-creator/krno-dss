@@ -210,7 +210,7 @@
             <div class="flex-grow flex gap-3 min-h-0">
 
                 <!-- LEFT: Big Wind Graphic -->
-                <div class="asos-box flex flex-col items-center justify-between" style="width:48%; padding:10px;"
+                <div class="asos-box flex flex-col items-center justify-between" id="wind-obs-box" style="width:48%; padding:10px;"
                      onmouseenter="showWindForecast()" onmouseleave="hideTooltip()">
                     <div class="asos-label w-full">WIND</div>
 
@@ -503,6 +503,19 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             initDashboard();
+            // Belt+suspenders: also attach wind hover via JS in case inline attr fails
+            document.addEventListener('mouseover', function(e) {
+                var box = document.getElementById('wind-obs-box');
+                if (box && box.contains(e.target) && !box.contains(e.relatedTarget)) {
+                    showWindForecast();
+                }
+            });
+            document.addEventListener('mouseout', function(e) {
+                var box = document.getElementById('wind-obs-box');
+                if (box && box.contains(e.target) && !box.contains(e.relatedTarget)) {
+                    hideTooltip();
+                }
+            });
 
             // Clock — update every second
             setInterval(() => {
@@ -867,7 +880,7 @@
                 } else if (key === 'TEMPERATURE' && block?.TMP != null) {
                     const tCol = deciColormap('TEMPERATURE', block.TMP);
                     var p99t = Math.round(block.TMP + 2.33 * (block.TSD || 1));
-                    metLine = `<span style="color:${deciColormap('TEMPERATURE', p99t)||'#fff'};font-weight:800;">${p99t}°F</span><span style="color:#71717a;"> P99 (fcst: ${Math.round(block.TMP)}°F)</span>`;
+                    metLine = `<span style="color:${deciColormap('TEMPERATURE', p99t)||'#fff'};font-weight:800;">${p99t}°F</span>`;
                     if (block.DPT != null) metLine += `<span style="color:#71717a;"> · Dew ${Math.round(block.DPT)}°F</span>`;
                 } else if (key === 'VISIBILITY' && block?.VIS != null) {
                     const sm = block.VIS / 10;
