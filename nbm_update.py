@@ -187,9 +187,13 @@ def parse_nbp(sec):
     if len(txnsd)>=4:
         r.update({'TMAX_D2_STD': max(txnsd[2], txnsd[3]),
                   'TMIN_N2_STD': min(txnsd[2], txnsd[3])})
+    # G24P values are in KNOTS — convert to mph before storing.
+    # This is the critical unit fix: without it, a 39-knot (45 mph) median
+    # gets compared against mph thresholds and all wind probabilities are wrong.
+    KT_TO_MPH = 1.15078
     for pct,row in [(10,g24p1),(20,g24p2),(50,g24p5),(70,g24p7),(90,g24p9)]:
-        if len(row)>=1: r[f'G24_D1_P{pct}']=row[0]
-        if len(row)>=2: r[f'G24_D2_P{pct}']=row[1]
+        if len(row)>=1: r[f'G24_D1_P{pct}'] = round(row[0] * KT_TO_MPH, 1)
+        if len(row)>=2: r[f'G24_D2_P{pct}'] = round(row[1] * KT_TO_MPH, 1)
     return r
 
 # ── Build 3-hour blocks ────────────────────────────────────────────────────────
