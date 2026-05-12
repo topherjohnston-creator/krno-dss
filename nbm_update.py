@@ -168,19 +168,25 @@ def parse_nbp(sec):
     g24p5=parse_row('G24P5',sec); g24p7=parse_row('G24P7',sec)
     g24p9=parse_row('G24P9',sec)
     r = {}
-    # TXNMN alternates Min/Max starting with the next 12z period:
-    # col0=TMIN_N1 (tonight low), col1=TMAX_D1 (tomorrow high),
-    # col2=TMIN_N2 (D2 night low), col3=TMAX_D2 (D2 high)
-    # NOTE: original code had cols 0 and 1 swapped vs. NOAA documentation.
-    # Corrected mapping below. Verify against actual bulletin if values look wrong.
+    # TXNMN alternates MinT (at 12z) and MaxT (at 00z), but which column comes
+    # FIRST is cycle-dependent:
+    #   01Z / 07Z runs → next 12Z is closer  → col[0]=MinT, col[1]=MaxT
+    #   13Z / 19Z runs → next 00Z is closer  → col[0]=MaxT, col[1]=MinT
+    # FIX: use min/max of each pair — robust regardless of cycle.
+    # MaxT is always warmer than MinT for the same calendar day.
     if len(txnmn)>=2:
-        r.update({'TMIN_N1':txnmn[0],'TMAX_D1':txnmn[1]})
+        r.update({'TMAX_D1': max(txnmn[0], txnmn[1]),
+                  'TMIN_N1': min(txnmn[0], txnmn[1])})
     if len(txnmn)>=4:
-        r.update({'TMIN_N2':txnmn[2],'TMAX_D2':txnmn[3]})
+        r.update({'TMAX_D2': max(txnmn[2], txnmn[3]),
+                  'TMIN_N2': min(txnmn[2], txnmn[3])})
+    # Std devs: assign larger std to MaxT (daytime heating is more variable)
     if len(txnsd)>=2:
-        r.update({'TMIN_N1_STD':txnsd[0],'TMAX_D1_STD':txnsd[1]})
+        r.update({'TMAX_D1_STD': max(txnsd[0], txnsd[1]),
+                  'TMIN_N1_STD': min(txnsd[0], txnsd[1])})
     if len(txnsd)>=4:
-        r.update({'TMIN_N2_STD':txnsd[2],'TMAX_D2_STD':txnsd[3]})
+        r.update({'TMAX_D2_STD': max(txnsd[2], txnsd[3]),
+                  'TMIN_N2_STD': min(txnsd[2], txnsd[3])})
     for pct,row in [(10,g24p1),(20,g24p2),(50,g24p5),(70,g24p7),(90,g24p9)]:
         if len(row)>=1: r[f'G24_D1_P{pct}']=row[0]
         if len(row)>=2: r[f'G24_D2_P{pct}']=row[1]
@@ -282,31 +288,34 @@ def compute_block(block, bi, nbp):
     d2 = bi >= 8
 
     # ── WIND ──────────────────────────────────────────────────────────────────
-    # Uses NBP G24 gust percentiles for 24-hr max gust Gaussian distribution.
+    # Uses NBP G24 24-hour max gust percentiles (4 cycles/day: 01/07/13/19Z).
+    # Between NBP cycles the values are stale by up to 6 hours — acceptable.
     #
-    # FIX v2 (BUG): was scanning HIGH→LOW and stopping at first p > 0.0.
-    # Due to Gaussian tails, gauss_above always returns a non-zero value once
-    # above the rounding threshold (0.05%), so the old loop stopped at the
-    # highest threshold with a tiny probability (e.g. 0.2% at 58 mph even for
-    # a 35 mph median day), reporting the wrong level with a misleading prob.
+    # DESIGN (v3): P50-based level + lower-bound probability.
+    #   Level = intensity tier where P50 median falls.
+    #           Tells operations WHERE gusts are most expected.
+    #   Prob  = P(exceeding that tier's lower threshold).
+    #           Tells operations HOW CONFIDENT we are of reaching that tier.
     #
-    # FIX: scan LOW→HIGH, keep updating as long as prob >= HAZARD_MIN_PROB (5%).
-    # Probabilities decrease monotonically with threshold, so the first miss
-    # means all higher thresholds will also miss — safe to break.
-    # Result: highest level where there is at least a 5% chance of occurrence,
-    # with that level's probability as the card value.
+    # Prior approaches produced the wrong metric label:
+    #   P50=45 → P(>58)=10% → "MINOR at 58-65 mph"  (WRONG)
+    #   v3:    → P(>45)=50% → "MODERATE at 45-58 mph" (CORRECT)
     gm, gs = pct_to_gaussian(
         nbp.get(f"G24_D{'2' if d2 else '1'}_P10"),
         nbp.get(f"G24_D{'2' if d2 else '1'}_P50"),
         nbp.get(f"G24_D{'2' if d2 else '1'}_P90"))
     wp, wl = 0.0, 0
-    if gm:
-        for t, l in [(30,2),(45,3),(58,4),(65,5)]:   # LOW → HIGH
-            p = gauss_above(gm, gs, t)
-            if p >= HAZARD_MIN_PROB:
-                wp, wl = p, l
-            else:
-                break  # monotonically decreasing — no higher threshold will qualify
+    if gm is not None:
+        if   gm >= 65: wl, low = 5, 65
+        elif gm >= 58: wl, low = 4, 58
+        elif gm >= 45: wl, low = 3, 45
+        elif gm >= 30: wl, low = 2, 30
+        else:          wl, low = 0, 30   # median < 30; check for tail risk
+        wp = gauss_above(gm, gs, low)
+        if wl == 0 and wp < HAZARD_MIN_PROB:
+            wp = 0.0   # median and tail both negligible → no wind hazard
+        elif wl == 0 and wp >= HAZARD_MIN_PROB:
+            wl = 2     # non-trivial chance of 30+ mph despite low median
     h["WIND"] = {"prob":wp,"risk":rlvl(wp),"level":wl,"color":RISK_C[rlvl(wp)]}
 
     # ── LIGHTNING ─────────────────────────────────────────────────────────────
@@ -434,6 +443,14 @@ def main():
         (bi*3+1) <= int(k) <= (bi*3+3) for k in [str(x) for x in nbs.keys()]
         for bi in [b]))
     print(f"  NBH: {len(nbh)} hrs (D1, by design)  NBS: {len(nbs)} periods (D1+D2)  NBP: {len(nbp)} fields")
+
+    # ── DEBUG: uncomment to verify G24 values against NBM histogram/bulletin ──
+    # print("\nNBP raw values (compare against NBM text tool at blend.mdl.nws.noaa.gov):")
+    # for day in ['D1', 'D2']:
+    #     pcts = {p: nbp.get(f'G24_{day}_P{p}') for p in [10,20,50,70,90]}
+    #     print(f"  G24 {day} gust pctiles: {pcts}")
+    # print(f"  MaxT: D1={nbp.get('TMAX_D1')}°F  D2={nbp.get('TMAX_D2')}°F")
+    # print(f"  MinT: N1={nbp.get('TMIN_N1')}°F  N2={nbp.get('TMIN_N2')}°F")
 
     # Build blocks and compute hazards
     blocks = make_blocks(nbh, nbs)
