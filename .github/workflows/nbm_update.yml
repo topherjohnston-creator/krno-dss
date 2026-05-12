@@ -5,8 +5,6 @@ on:
     - cron: '0 * * * *'   # Every hour on the hour
   workflow_dispatch:        # Manual trigger from GitHub Actions tab
 
-# Prevent concurrent runs — eliminates the push race condition entirely.
-# If a new run triggers while one is already in progress, the new one waits.
 concurrency:
   group: nbm-update
   cancel-in-progress: false
@@ -15,11 +13,11 @@ jobs:
   update:
     runs-on: ubuntu-latest
     permissions:
-      contents: write       # Needed to commit threats.json / timeline.json
+      contents: write
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4   # Update to @v5 before September 2026
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -38,4 +36,6 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add threats.json timeline.json
           git diff --staged --quiet || git commit -m "Auto-update NBM hazard data $(date -u '+%Y-%m-%d %H:%MZ')"
-          git push
+          git fetch origin main
+          git rebase -X ours origin/main
+          git push origin main
