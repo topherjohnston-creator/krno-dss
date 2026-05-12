@@ -136,6 +136,14 @@
         <div class="panel p-4" style="z-index: 20;"> 
             <div class="flex justify-between items-center mb-3">
                 <div class="flex items-center gap-3">
+                    <!-- Logos LEFT of title -->
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/7/79/NOAA_logo.svg" alt="NOAA" class="h-9 w-9 drop-shadow-md opacity-80" style="flex-shrink:0;">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/f/ff/US-NationalWeatherService-Logo.svg" alt="NWS" class="h-9 w-9 drop-shadow-md opacity-80" style="flex-shrink:0;">
+                    <div class="flex flex-col justify-center" style="margin-right:8px;">
+                        <span class="text-[9px] font-bold text-slate-500 uppercase leading-none">National</span>
+                        <span class="text-[9px] font-bold text-slate-500 uppercase leading-none">Weather Service</span>
+                    </div>
+                    <div style="width:1px;height:32px;background:rgba(255,255,255,0.1);flex-shrink:0;"></div>
                     <div class="flex flex-col">
                         <div style="font-family:'Oswald',sans-serif; font-size:1.05rem; font-weight:700; color:#e2e8f0; letter-spacing:0.06em; text-transform:uppercase; line-height:1.1;">
                             Weather Decision Support
@@ -144,17 +152,9 @@
                             Reno-Tahoe International Airport — KRNO
                         </div>
                     </div>
-                    <div class="flex items-center gap-2" style="margin-left:8px;">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/7/79/NOAA_logo.svg" alt="NOAA" class="h-9 w-9 drop-shadow-md opacity-80">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/f/ff/US-NationalWeatherService-Logo.svg" alt="NWS" class="h-9 w-9 drop-shadow-md opacity-80">
-                        <div class="flex flex-col justify-center">
-                            <span class="text-[9px] font-bold text-slate-500 uppercase leading-none">National</span>
-                            <span class="text-[9px] font-bold text-slate-500 uppercase leading-none">Weather Service</span>
-                        </div>
-                    </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Threat Matrix</span>
+                    <span style="font-family:'Oswald',sans-serif; font-size:0.72rem; font-weight:500; color:#4b5563; letter-spacing:0.08em; text-transform:uppercase;">Threat Matrix</span>
                 </div>
             </div>
             
@@ -280,6 +280,7 @@
                          onmouseenter="showObsForecast('Visibility Forecast','VIS','VISIBILITY',10,'SM',v=>v/10)"
                          onmouseleave="hideTooltip()">
                         <div class="asos-label">VISIBILITY</div>
+                        <div id="vis-spark-wrap" style="margin:4px 0 2px;display:none;"></div>
                         <div class="asos-value text-white" id="vis-val">--</div>
                         <div class="asos-sub font-bold text-gray-400" id="vis-sub"></div>
                         <i class="ph-fill ph-eye absolute bottom-2 right-2 text-2xl opacity-10"></i>
@@ -297,8 +298,9 @@
 
                     <!-- Row 2: Temperature | Present Weather -->
                     <div class="asos-box" id="temp-box"
-                         onmouseenter="showTempDewTooltip()" onmouseleave="hideTooltip()">
+                         onmouseenter="showTempForecast()" onmouseleave="hideTooltip()">
                         <div class="asos-label">TEMPERATURE</div>
+                        <div id="temp-spark-wrap" style="margin:4px 0 2px;display:none;"></div>
                         <div class="asos-value">
                             <span id="t-val">--</span>
                             <span class="text-sm align-top text-gray-500">°F</span>
@@ -323,8 +325,9 @@
 
                     <!-- Row 3: Dewpoint & RH | 1-Hour Precipitation -->
                     <div class="asos-box" id="dew-box"
-                         onmouseenter="showTempDewTooltip()" onmouseleave="hideTooltip()">
+                         onmouseenter="showDewForecast()" onmouseleave="hideTooltip()">
                         <div class="asos-label">DEWPOINT</div>
+                        <div id="dew-spark-wrap" style="margin:4px 0 2px;display:none;"></div>
                         <div class="asos-value">
                             <span id="d-val">--</span>
                             <span class="text-sm align-top text-gray-500">°F</span>
@@ -349,14 +352,6 @@
         <div class="panel p-4 flex flex-col" style="z-index: 20;">
             <div class="flex justify-between items-center mb-2">
                 <h2 id="wwa-title-text" class="font-bold text-sm tracking-wider uppercase text-slate-300">ACTIVE WATCHES, WARNINGS & ADVISORIES</h2>
-                <div class="flex items-center gap-2">
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/7/79/NOAA_logo.svg" alt="NOAA" class="h-7 w-7 drop-shadow-md opacity-70">
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/f/ff/US-NationalWeatherService-Logo.svg" alt="NWS" class="h-7 w-7 drop-shadow-md opacity-70">
-                    <div class="flex flex-col justify-center">
-                        <span class="text-[9px] font-bold text-slate-600 uppercase leading-none">National</span>
-                        <span class="text-[9px] font-bold text-slate-600 uppercase leading-none">Weather Service</span>
-                    </div>
-                </div>
             </div>
             
             <div class="h-24 border-b border-[#27272a] pb-3 mb-2 relative flex-shrink-0 flex">
@@ -563,6 +558,54 @@
         function hideTooltip() { if(tooltip) { tooltip.classList.remove('visible'); } }
 
         // ── SPARKLINE HELPERS ────────────────────────────────────────────────────
+
+        // Build compact sparkline SVG with Y-axis min/mid/max labels
+        function makeAxisSparkline(key, cmapName, transform, unit, wrapId) {
+            if (!nbhHourly || nbhHourly.length === 0) return;
+            const wrap = document.getElementById(wrapId);
+            if (!wrap) return;
+            const YAXIS_W = 26, BAR_AREA_W = 220, H = 44;
+            const vals = nbhHourly.map(h => {
+                let v = h[key] != null ? h[key] : null;
+                return (v !== null && transform) ? transform(v) : v;
+            }).filter(v => v !== null);
+            if (vals.length === 0) return;
+            const vMin = Math.min(...vals), vMax = Math.max(...vals);
+            const vMid = (vMin + vMax) / 2;
+            const range = vMax - vMin || 1;
+            const BAR_W = Math.floor(BAR_AREA_W / nbhHourly.length);
+            let bars = '', ticks = '';
+            nbhHourly.forEach((h, i) => {
+                let v = h[key] != null ? h[key] : null;
+                if (v === null) return;
+                if (transform) v = transform(v);
+                const bh = Math.max(2, Math.round(((v - vMin) / range) * H));
+                const x = YAXIS_W + i * BAR_W;
+                const col = deciColormap(cmapName, v) || '#52525b';
+                bars += `<rect x="${x}" y="${H - bh}" width="${Math.max(BAR_W-1,1)}" height="${bh}" fill="${col}" rx="1" opacity="0.9"/>`;
+            });
+            // Y-axis labels
+            const fmt = v => unit === 'SM' ? v.toFixed(1) : Math.round(v) + unit;
+            ticks  = `<text x="${YAXIS_W-2}" y="${5}"  text-anchor="end" font-size="7" fill="#52525b" font-family="monospace">${fmt(vMax)}</text>`;
+            ticks += `<text x="${YAXIS_W-2}" y="${H/2+3}" text-anchor="end" font-size="7" fill="#52525b" font-family="monospace">${fmt(vMid)}</text>`;
+            ticks += `<text x="${YAXIS_W-2}" y="${H+1}"  text-anchor="end" font-size="7" fill="#52525b" font-family="monospace">${fmt(vMin)}</text>`;
+            // Y gridlines
+            ticks += `<line x1="${YAXIS_W}" x2="${YAXIS_W+BAR_AREA_W}" y1="1"     y2="1"     stroke="rgba(255,255,255,0.05)" stroke-width="1"/>`;
+            ticks += `<line x1="${YAXIS_W}" x2="${YAXIS_W+BAR_AREA_W}" y1="${H/2}" y2="${H/2}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>`;
+            ticks += `<line x1="${YAXIS_W}" x2="${YAXIS_W+BAR_AREA_W}" y1="${H}"   y2="${H}"   stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
+            const W = YAXIS_W + BAR_AREA_W;
+            wrap.innerHTML = `<svg width="${W}" height="${H}" style="display:block;border-radius:2px;background:rgba(0,0,0,0.18);">${ticks}${bars}</svg>`;
+            wrap.style.display = 'block';
+        }
+
+        // Render all permanent obs sparklines (called once nbhHourly is loaded)
+        function renderObsSparklines() {
+            makeAxisSparkline('TMP', 'TEMPERATURE', null,     '°F', 'temp-spark-wrap');
+            makeAxisSparkline('DPT', 'TEMPERATURE', null,     '°F', 'dew-spark-wrap');
+            makeAxisSparkline('VIS', 'VISIBILITY',  v=>v/10,  'SM', 'vis-spark-wrap');
+        }
+
+
         function fmtHour(d) {
             let h = d.getHours(); const ap = h >= 12 ? 'P' : 'A';
             h = h % 12 || 12;
@@ -603,33 +646,48 @@
             return `<svg width="${W}" height="${H+16}" style="display:block;margin-top:5px;border-radius:3px;background:rgba(0,0,0,0.2);">${bars}${labels}</svg>`;
         }
 
-        // Build dual-bar sparkline (e.g. wind speed + gust)
+        // Build dual-bar sparkline with wind direction arrows above
         function makeDualSparkline(key1, key2, col1, col2, maxVal) {
             if (!nbhHourly || nbhHourly.length === 0) return '';
             const baseMs = cycleStartTime || Date.now();
-            const W = 312, H = 52, BAR_W = Math.floor(W / nbhHourly.length);
+            const ARROW_H = 12, W = 312, H = 52, BAR_W = Math.floor(W / nbhHourly.length);
             const v1s = nbhHourly.map(h => h[key1] != null ? h[key1] : 0);
             const v2s = nbhHourly.map(h => h[key2] != null ? h[key2] : 0);
+            const wdrs = nbhHourly.map(h => h['WDR'] != null ? h['WDR'] * 10 : null);
             const dataMax = maxVal || Math.max(...v1s, ...v2s, 1);
-            let bars = '', labels = '';
+            let bars = '', arrows = '', labels = '';
+            const TOTAL_H = ARROW_H + H;
             v1s.forEach((v1, i) => {
                 const v2 = v2s[i];
                 const x = i * BAR_W;
+                const cx = x + BAR_W / 2;
                 const h2 = Math.max(2, Math.round((v2 / dataMax) * H));
                 const h1 = Math.max(2, Math.round((v1 / dataMax) * H));
-                // Gust bar (taller, amber)
-                bars += `<rect x="${x}" y="${H-h2}" width="${Math.max(BAR_W-1,1)}" height="${h2}" fill="${deciColormap('WIND', v2) || col2}" rx="1" opacity="0.85"/>`;
-                // Speed overlay (shorter, muted)
-                bars += `<rect x="${x}" y="${H-h1}" width="${Math.max(BAR_W-1,1)}" height="${h1}" fill="${col1}" rx="1" opacity="0.6"/>`;
+                // Bars offset down by ARROW_H
+                bars += `<rect x="${x}" y="${ARROW_H + H-h2}" width="${Math.max(BAR_W-1,1)}" height="${h2}" fill="${deciColormap('WIND', v2) || col2}" rx="1" opacity="0.85"/>`;
+                bars += `<rect x="${x}" y="${ARROW_H + H-h1}" width="${Math.max(BAR_W-1,1)}" height="${h1}" fill="${col1}" rx="1" opacity="0.55"/>`;
+                // Wind direction arrow (every 2 bars to avoid crowding)
+                if (i % 2 === 0 && wdrs[i] !== null) {
+                    const rad = (wdrs[i] - 180) * Math.PI / 180; // arrow points INTO the wind (FROM direction)
+                    const aLen = 4.5, cy = ARROW_H / 2;
+                    const x2 = cx + Math.sin(rad) * aLen;
+                    const y2 = cy - Math.cos(rad) * aLen;
+                    const x1 = cx - Math.sin(rad) * aLen;
+                    const y1 = cy + Math.cos(rad) * aLen;
+                    arrows += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#94a3b8" stroke-width="1.2" stroke-linecap="round"/>`;
+                    // Arrowhead
+                    const hLen=2.2, angle=Math.atan2(y2-y1,x2-x1);
+                    arrows += `<polygon points="${x2},${y2} ${x2-hLen*Math.cos(angle-0.5)},${y2-hLen*Math.sin(angle-0.5)} ${x2-hLen*Math.cos(angle+0.5)},${y2-hLen*Math.sin(angle+0.5)}" fill="#94a3b8"/>`;
+                }
                 if (i === 0 || i === 6 || i === 12 || i === 18 || i === 24) {
                     const d = new Date(baseMs + (nbhHourly[i].fxx || i+1) * 3600000);
                     const lbl = i === 0 ? 'Now' : fmtHour(d);
-                    labels += `<text x="${x + BAR_W/2}" y="${H+11}" text-anchor="middle" font-size="7.5" fill="#71717a" font-family="monospace">${lbl}</text>`;
+                    labels += `<text x="${cx}" y="${TOTAL_H+11}" text-anchor="middle" font-size="7.5" fill="#71717a" font-family="monospace">${lbl}</text>`;
                 }
             });
             const peakGust = Math.max(...v2s);
             const peakSpd = Math.max(...v1s);
-            return `<div style="font-size:0.6rem;color:#71717a;margin-bottom:2px;"><span style="color:#fbbf24;">■</span> Gust peak: ${Math.round(peakGust)} mph &nbsp; <span style="color:#93c5fd;">■</span> Speed peak: ${Math.round(peakSpd)} mph</div><svg width="${W}" height="${H+16}" style="display:block;border-radius:3px;background:rgba(0,0,0,0.2);">${bars}${labels}</svg>`;
+            return `<div style="font-size:0.6rem;color:#71717a;margin-bottom:2px;"><span style="color:#fbbf24;">■</span> Gust peak: ${Math.round(peakGust)} mph &nbsp;<span style="color:#93c5fd;">■</span> Speed: ${Math.round(peakSpd)} mph &nbsp;<span style="color:#94a3b8;">↗</span> Dir arrows</div><svg width="${W}" height="${TOTAL_H+16}" style="display:block;border-radius:3px;background:rgba(0,0,0,0.2);">${arrows}${bars}${labels}</svg>`;
         }
 
         // Generic obs sparkline tooltip
@@ -638,9 +696,12 @@
                 showTooltip(`<div style="color:#71717a;font-size:0.7rem;">No NBH forecast data loaded</div>`); return;
             }
             const spark = makeObsSparkline(key, cmapName, maxVal, transform, unit);
-            const vals = nbhHourly.map(h => h[key]).filter(v => v != null);
-            const peak = transform ? Math.max(...vals.map(transform)) : Math.max(...vals);
-            const tip = `<div style="font-weight:800;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:5px;">${title} <span style="color:#52525b;font-size:0.55rem;float:right;font-weight:400;">NBH 25-hr Forecast</span></div>${spark}`;
+            const rawVals = nbhHourly.map(h => h[key]).filter(v => v != null);
+            const txVals  = transform ? rawVals.map(transform) : rawVals;
+            const vMin = txVals.length ? Math.min(...txVals) : 0;
+            const vMax = txVals.length ? Math.max(...txVals) : 0;
+            const fmtV = v => unit === 'SM' ? v.toFixed(1) + unit : unit === '%' ? Math.round(v) + unit : Math.round(v) + unit;
+            const tip = `<div style="font-weight:800;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">${title} <span style="float:right;font-weight:400;color:#71717a;font-size:0.6rem;text-transform:none;">Min ${fmtV(vMin)} &nbsp; Max ${fmtV(vMax)}</span></div>${spark}`;
             showTooltip(tip);
         };
 
@@ -657,31 +718,27 @@
                 const pd = new Date(baseMs + (nbhHourly[peak_idx].fxx || peak_idx+1) * 3600000);
                 peakStr = `<div style="font-size:0.65rem;color:#fbbf24;margin-top:4px;">Peak gust: ${Math.round(peak_gust)} mph @ ${pd.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase()} ${fmtHour(pd)}</div>`;
             }
-            const tip = `<div style="font-weight:800;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:5px;">WIND FORECAST <span style="color:#52525b;font-size:0.55rem;float:right;font-weight:400;">NBH 25-hr</span></div>${spark}${peakStr}`;
+            const tip = `<div style="font-weight:800;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:5px;">WIND FORECAST </div>${spark}${peakStr}`;
             showTooltip(tip);
         };
 
         // Temp/Dew spread tooltip with frost warning
-        window.showTempDewTooltip = function() {
-            if (!liveMetar) return;
-            const tF = liveMetar.temp != null ? Math.round(liveMetar.temp * 9/5 + 32) : null;
-            const dF = liveMetar.dewp != null ? Math.round(liveMetar.dewp * 9/5 + 32) : null;
-            if (tF == null || dF == null) return;
-            const spread = tF - dF;
-            const spreadColor = spread <= 5 ? '#facc15' : spread <= 10 ? '#a1a1aa' : '#52525b';
-            const frostWarn  = spread <= 5 ? '<div style="color:#facc15;font-weight:800;font-size:0.65rem;margin-top:4px;">⚠ FROST / FREEZING FOG POSSIBLE</div>' : '';
-            const spark = makeObsSparkline('TMP', 'TEMPERATURE', 120, null, '°F');
-            const html = `
-                <div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:5px;">TEMP / DEW ANALYSIS <span style="color:#52525b;font-size:0.55rem;float:right;font-weight:400;">NBH 25-hr</span></div>
-                <div style="font-family:monospace;font-size:0.72rem;display:flex;flex-direction:column;gap:3px;">
-                    <div style="display:flex;justify-content:space-between;"><span style="color:#a1a1aa;">AIR TEMP</span><span style="font-weight:800;color:white;">${tF}°F</span></div>
-                    <div style="display:flex;justify-content:space-between;"><span style="color:#a1a1aa;">DEWPOINT</span><span style="font-weight:800;color:#60a5fa;">${dF}°F</span></div>
-                    <div style="display:flex;justify-content:space-between;border-top:1px solid #3f3f46;padding-top:3px;"><span style="color:#a1a1aa;">T/D SPREAD</span><span style="font-weight:800;color:${spreadColor};">${spread}°F</span></div>
-                    ${liveMetar.rh != null ? `<div style="display:flex;justify-content:space-between;"><span style="color:#a1a1aa;">REL HUMIDITY</span><span style="font-weight:800;color:white;">${liveMetar.rh}%</span></div>` : ''}
-                </div>
-                ${frostWarn}${spark}`;
-            showTooltip(html);
+        // Temp box → temp forecast; Dew box → dew forecast
+        window.showTempForecast = function() {
+            if (!nbhHourly || nbhHourly.length === 0) return;
+            const vals = nbhHourly.map(h => h.TMP).filter(v => v!=null);
+            const mn = Math.min(...vals), mx2 = Math.max(...vals);
+            const spark = makeObsSparkline('TMP', 'TEMPERATURE', 130, null, '°F');
+            showTooltip(`<div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">Temperature Forecast <span style="float:right;font-weight:400;color:#71717a;font-size:0.6rem;">Min ${Math.round(mn)}°  Max ${Math.round(mx2)}°</span></div>${spark}`);
         };
+        window.showDewForecast = function() {
+            if (!nbhHourly || nbhHourly.length === 0) return;
+            const vals = nbhHourly.map(h => h.DPT).filter(v => v!=null);
+            const mn = Math.min(...vals), mx2 = Math.max(...vals);
+            const spark = makeObsSparkline('DPT', 'TEMPERATURE', 100, null, '°F');
+            showTooltip(`<div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">Dewpoint Forecast <span style="float:right;font-weight:400;color:#71717a;font-size:0.6rem;">Min ${Math.round(mn)}°  Max ${Math.round(mx2)}°</span></div>${spark}`);
+        };
+        window.showTempDewTooltip = window.showTempForecast; // legacy alias
 
         // Wind rose hover: all-runway crosswind components
         window.showWindRoseTooltip = function() {
@@ -717,7 +774,8 @@
             const bhaz  = nbmBlockHazards?.[bi];
 
             // Time window label
-            const d1 = new Date(globalNow.getTime() + offset * 3600000);
+            const cycMs = cycleStartTime || globalNow.getTime();
+            const d1 = new Date(cycMs + (nbmBlocks?.[offset]?.start_fxx ?? (offset*3+1)) * 3600000);
             const d2 = new Date(globalNow.getTime() + (Math.min(offset+3, 48)) * 3600000);
             const fmt = d => {
                 let h = d.getHours(); const ap = h >= 12 ? 'P' : 'A';
@@ -1095,6 +1153,14 @@
         }
 
         function applyMETARtoDisplay(m) {
+            // Snapshot PREVIOUS obs BEFORE liveMetar is updated (real trend comparison)
+            if (liveMetar) {
+                _prevObs = {
+                    tF:    liveMetar.temp != null ? cToF(liveMetar.temp) : null,
+                    dF:    liveMetar.dewp != null ? cToF(liveMetar.dewp) : null,
+                    visib: liveMetar.visib
+                };
+            }
             const wDir = m.wdir; const wSpd = m.wspd || 0; const wGst = m.wgst || 0;
             const isCalm = wSpd === 0;  // CALM when speed=0, regardless of sensor direction noise
 
@@ -1290,8 +1356,15 @@
                 const now = Date.now();
                 if (!window._lastMetarFetch) window._lastMetarFetch = now;
                 window._lastMetarFetch = now;
-                _prevObs = liveMetar ? { tF: liveMetar.temp ? cToF(liveMetar.temp) : 0, dF: liveMetar.dewp ? cToF(liveMetar.dewp) : 0, visib: liveMetar.visib } : _prevObs;
-                timeEl2.textContent = 'Updated just now';
+
+                const obsNow = new Date();
+                const obsH = obsNow.getHours(), obsM = obsNow.getMinutes();
+                const obsAp = obsH >= 12 ? 'P' : 'A';
+                const obsH12 = obsH % 12 || 12;
+                const obsMStr = String(obsM).padStart(2,'0');
+                const obsUH = String(obsNow.getUTCHours()).padStart(2,'0');
+                const obsUM = String(obsNow.getUTCMinutes()).padStart(2,'0');
+                timeEl2.textContent = `Updated just now · ${obsH12}:${obsMStr}${obsAp} PDT | ${obsUH}:${obsUM}Z`;
                 const liveDot = document.getElementById('live-dot');
                 if (liveDot) liveDot.style.display = 'inline-block';
             }
@@ -1655,6 +1728,7 @@
                     nbmBlocks       = timelineResp.value.blocks;
                     nbmBlockHazards = timelineResp.value.block_hazards;
                     nbhHourly       = timelineResp.value.nbh_hourly || [];
+                    renderObsSparklines();
                 }
 
                 if (!liveMetar) {
@@ -1850,20 +1924,29 @@
 
                         const refKey = HZ_KEY(h.id);
                         const rowStripe = hIdx % 2 === 0 ? 'timeline-row-even' : 'timeline-row-odd';
-                        let rowHtml = `<div class="timeline-row ${rowStripe}"><div class="horizontal-guide"></div><div class="bar-container">`;
+                        let rowHtml = `<div class="timeline-row ${rowStripe}" style="position:relative;"><div class="horizontal-guide"></div><div class="bar-container" style="position:relative;">`;
 
                         for (let bi = 0; bi < N_BLOCKS; bi++) {
-                            const left  = bi * BLOCK_W;
+                            const blk   = nbmBlocks?.[bi];
                             const bhaz  = nbmBlockHazards?.[bi]?.[refKey];
+                            // Position by actual UTC time using cycleStartTime
+                            const cycleMs = cycleStartTime || globalNow.getTime();
+                            const sFxx = blk?.start_fxx ?? (bi*3+1);
+                            const eFxx = blk?.end_fxx   ?? (bi*3+3);
+                            const sHr  = (cycleMs + sFxx*3600000 - globalNow.getTime()) / 3600000;
+                            const eHr  = (cycleMs + (eFxx+1)*3600000 - globalNow.getTime()) / 3600000;
+                            if (eHr <= 0 || sHr >= TOTAL_HOURS) continue;
+                            const clampS   = Math.max(0, sHr);
+                            const clampE   = Math.min(TOTAL_HOURS, eHr);
+                            const leftPct  = (clampS / TOTAL_HOURS * 100).toFixed(2);
+                            const widthPct = ((clampE - clampS) / TOTAL_HOURS * 100).toFixed(2);
                             const prob  = bhaz?.prob ?? 0;
                             const risk  = bhaz?.risk ?? 0;
                             const bg    = BLK_BG[risk] || BLK_BG[0];
                             const tx    = BLK_TX[risk] || BLK_TX[0];
-
-                            // Tooltip: time window + probability
-                            const sf = bi*3+1;
-                            const d1 = new Date(globalNow.getTime() + sf*3600000);
-                            const d2 = new Date(globalNow.getTime() + (sf+2)*3600000);
+                            // Cycle-accurate tooltip times
+                            const d1 = new Date(cycleMs + sFxx*3600000);
+                            const d2 = new Date(cycleMs + (eFxx+1)*3600000);
                             const tf = d => { const hh=d.getHours(); return `${hh%12||12}${hh>=12?'P':'A'}`; };
                             const tip = `${tf(d1)}-${tf(d2)}: ${Math.round(prob)}%${bhaz?.level>0?' L'+bhaz.level:''}`;
 
@@ -1872,7 +1955,7 @@
                                 ? `<span style="font-size:0.6rem;font-weight:800;color:${tx};line-height:1;pointer-events:none">${Math.round(prob)}%</span>`
                                 : '';
 
-                            rowHtml += `<div class="timeline-block" title="${tip}" style="left:${left.toFixed(2)}%;width:${BLOCK_W.toFixed(2)}%;background:${bg};display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(0,0,0,0.25);">${txt}</div>`;
+                            rowHtml += `<div class="timeline-block" title="${tip}" style="left:${leftPct}%;width:${widthPct}%;background:${bg};display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(0,0,0,0.18);position:absolute;">${txt}</div>`;
                         }
 
                         rowHtml += `</div></div>`;
