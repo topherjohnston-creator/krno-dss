@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KRNO DSS Dashboard</title>
+    <title>Wx DSS Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -14,7 +14,7 @@
         .panel { background-color: #18181b; border: 1px solid #27272a; border-radius: 6px; display: flex; flex-direction: column; min-height: 200px; height: 100%; }
         
         /* INTERACTIVITY */
-        .ops-card { position: relative; border-radius: 6px; background: #27272a; transition: all 0.2s ease; border: 1px solid transparent; cursor: crosshair; }
+        .ops-card { position: relative; border-radius: 6px; background: #27272a; transition: all 0.2s ease; border: 1px solid transparent; cursor: crosshair; overflow: hidden; }
         .ops-card:hover { background: #3f3f46; border-color: #71717a; }
         
         /* TYPOGRAPHY */
@@ -134,39 +134,40 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-2 gap-4 h-full">
         
         <div class="panel p-4" style="z-index: 20;"> 
-            <div class="flex justify-between items-center mb-3">
-                <div class="flex items-center gap-3">
-                    <!-- Logos LEFT of title -->
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/7/79/NOAA_logo.svg" alt="NOAA" class="h-9 w-9 drop-shadow-md opacity-80" style="flex-shrink:0;">
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/f/ff/US-NationalWeatherService-Logo.svg" alt="NWS" class="h-9 w-9 drop-shadow-md opacity-80" style="flex-shrink:0;">
-                    <div class="flex flex-col justify-center" style="margin-right:8px;">
-                        <span class="text-[9px] font-bold text-slate-500 uppercase leading-none">National</span>
-                        <span class="text-[9px] font-bold text-slate-500 uppercase leading-none">Weather Service</span>
+            <!-- Panel title row: title top-left, Threat Matrix label top-right -->
+            <div class="flex justify-between items-start mb-3">
+                <div class="flex flex-col">
+                    <div style="font-family:'Oswald',sans-serif; font-size:1.05rem; font-weight:700; color:#e2e8f0; letter-spacing:0.06em; text-transform:uppercase; line-height:1.1;">
+                        Weather Decision Support
                     </div>
-                    <div style="width:1px;height:32px;background:rgba(255,255,255,0.1);flex-shrink:0;"></div>
-                    <div class="flex flex-col">
-                        <div style="font-family:'Oswald',sans-serif; font-size:1.05rem; font-weight:700; color:#e2e8f0; letter-spacing:0.06em; text-transform:uppercase; line-height:1.1;">
-                            Weather Decision Support
-                        </div>
-                        <div style="font-family:'Oswald',sans-serif; font-size:0.72rem; font-weight:500; color:#64748b; letter-spacing:0.12em; text-transform:uppercase; margin-top:1px;">
-                            Reno-Tahoe International Airport — KRNO
-                        </div>
+                    <div style="font-family:'Oswald',sans-serif; font-size:0.72rem; font-weight:500; color:#64748b; letter-spacing:0.12em; text-transform:uppercase; margin-top:1px;">
+                        Reno-Tahoe International Airport — KRNO
                     </div>
                 </div>
-                <div class="flex items-center gap-2">
-                    <span style="font-family:'Oswald',sans-serif; font-size:0.72rem; font-weight:500; color:#4b5563; letter-spacing:0.08em; text-transform:uppercase;">Threat Matrix</span>
-                </div>
+                <h2 class="font-bold text-base tracking-wider text-slate-300" style="flex-shrink:0;margin-left:16px;">Threat Matrix</h2>
             </div>
             
             <div id="hazards-grid" class="grid grid-cols-4 gap-3 flex-grow h-full relative" style="z-index: 10;"></div>
             
-            <div class="flex justify-end items-center mt-3 pt-2 border-t border-[#27272a] gap-4">
-                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #3f3f46;"></div>None</div>
-                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #e2f0cb;"></div>Little to None</div>
-                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #ffeb3b;"></div>Minor</div>
-                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #ff9800;"></div>Moderate</div>
-                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #f44336;"></div>Major</div>
-                 <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #9c27b0;"></div>Extreme</div>
+            <div class="flex justify-between items-center mt-3 pt-2 border-t border-[#27272a]">
+                <!-- NOAA/NWS logos bottom-left -->
+                <div class="flex items-center gap-2">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/7/79/NOAA_logo.svg" alt="NOAA" class="h-7 w-7 drop-shadow-md" style="opacity:0.55;">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/f/ff/US-NationalWeatherService-Logo.svg" alt="NWS" class="h-7 w-7 drop-shadow-md" style="opacity:0.55;">
+                    <div class="flex flex-col justify-center">
+                        <span class="text-[8px] font-bold text-slate-600 uppercase leading-none">National</span>
+                        <span class="text-[8px] font-bold text-slate-600 uppercase leading-none">Weather Service</span>
+                    </div>
+                </div>
+                <!-- Risk legend right-aligned -->
+                <div class="flex items-center gap-3 flex-wrap justify-end">
+                     <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #3f3f46;"></div>None</div>
+                     <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #e2f0cb;"></div>Little to None</div>
+                     <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #ffeb3b;"></div>Minor</div>
+                     <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #ff9800;"></div>Moderate</div>
+                     <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #f44336;"></div>Major</div>
+                     <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #a855f7;"></div>Extreme</div>
+                </div>
             </div>
         </div>
 
@@ -280,7 +281,6 @@
                          onmouseenter="showObsForecast('Visibility Forecast','VIS','VISIBILITY',10,'SM',v=>v/10)"
                          onmouseleave="hideTooltip()">
                         <div class="asos-label">VISIBILITY</div>
-                        <div id="vis-spark-wrap" style="margin:4px 0 2px;display:none;"></div>
                         <div class="asos-value text-white" id="vis-val">--</div>
                         <div class="asos-sub font-bold text-gray-400" id="vis-sub"></div>
                         <i class="ph-fill ph-eye absolute bottom-2 right-2 text-2xl opacity-10"></i>
@@ -300,7 +300,6 @@
                     <div class="asos-box" id="temp-box"
                          onmouseenter="showTempForecast()" onmouseleave="hideTooltip()">
                         <div class="asos-label">TEMPERATURE</div>
-                        <div id="temp-spark-wrap" style="margin:4px 0 2px;display:none;"></div>
                         <div class="asos-value">
                             <span id="t-val">--</span>
                             <span class="text-sm align-top text-gray-500">°F</span>
@@ -327,7 +326,6 @@
                     <div class="asos-box" id="dew-box"
                          onmouseenter="showDewForecast()" onmouseleave="hideTooltip()">
                         <div class="asos-label">DEWPOINT</div>
-                        <div id="dew-spark-wrap" style="margin:4px 0 2px;display:none;"></div>
                         <div class="asos-value">
                             <span id="d-val">--</span>
                             <span class="text-sm align-top text-gray-500">°F</span>
@@ -600,9 +598,7 @@
 
         // Render all permanent obs sparklines (called once nbhHourly is loaded)
         function renderObsSparklines() {
-            makeAxisSparkline('TMP', 'TEMPERATURE', null,     '°F', 'temp-spark-wrap');
-            makeAxisSparkline('DPT', 'TEMPERATURE', null,     '°F', 'dew-spark-wrap');
-            makeAxisSparkline('VIS', 'VISIBILITY',  v=>v/10,  'SM', 'vis-spark-wrap');
+            // Inline permanent sparklines disabled — hover tooltips used instead
         }
 
 
@@ -768,96 +764,71 @@
             showTooltip(tip);
         };
 
-        window.showHourTooltip = function(offset) {
-            const bi = Math.min(Math.floor(offset / 3), 15);
-            const block = nbmBlocks?.[bi];
-            const bhaz  = nbmBlockHazards?.[bi];
-
-            // Time window label
+        window.showHourTooltip = function(bi, refKey) {
+            const blk = nbmBlocks?.[bi];
+            if (!blk) return;
             const cycMs = cycleStartTime || globalNow.getTime();
-            const d1 = new Date(cycMs + (nbmBlocks?.[offset]?.start_fxx ?? (offset*3+1)) * 3600000);
-            const d2 = new Date(globalNow.getTime() + (Math.min(offset+3, 48)) * 3600000);
-            const fmt = d => {
-                let h = d.getHours(); const ap = h >= 12 ? 'P' : 'A';
-                h = h % 12 || 12;
-                const dy = d.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
-                return `${dy} ${h}${ap}`;
+            // Cycle-accurate start/end times for this 3-hour block
+            const d1 = new Date(cycMs + blk.start_fxx * 3600000);
+            const d2 = new Date(cycMs + (blk.end_fxx + 1) * 3600000);
+            const tf = d => {
+                const hh = d.getHours(); const ap = hh >= 12 ? 'P' : 'A';
+                return `${hh % 12 || 12}${ap}`;
             };
-            const zHour = d1.getUTCHours().toString().padStart(2, '0');
+            const dy = d => d.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
+            const timeLabel = `${dy(d1)} ${tf(d1)} – ${dy(d2)} ${tf(d2)}`;
+            const zulaStr   = `${String(d1.getUTCHours()).padStart(2,'0')}Z – ${String(d2.getUTCHours()).padStart(2,'0')}Z`;
 
-            // Overall block risk for header color
-            const blockRisks = bhaz ? Object.values(bhaz).map(v => v?.risk || 0) : [0];
-            const maxRisk = Math.max(...blockRisks);
-            const headerColor = RISK_LEVELS[maxRisk]?.color || '#3f3f46';
-            const headerText  = RISK_LEVELS[maxRisk]?.name?.toUpperCase() || 'NO DATA';
+            // Pull hazard data for the block
+            const key = refKey || 'WIND';
+            const bhaz = nbmBlockHazards?.[bi]?.[key];
+            const blkData = nbmBlocks?.[bi] || {};
 
-            let rows = '';
+            let lines = [];
 
-            HAZARD_DETAILS.forEach(h => {
-                const key   = HZ_KEY_MAP[h.id] || h.id.toUpperCase();
-                const hdata = bhaz?.[key];
-                const risk  = hdata?.risk  ?? 0;
-                const prob  = hdata?.prob  ?? 0;
-                const level = hdata?.level ?? 0;
-                if (prob === 0 && risk === 0) return; // skip zero hazards
+            // Wind
+            const gst = blkData.GST; const wsp = blkData.WSP; const wdr = blkData.WDR;
+            if (gst != null) {
+                const gustLine = `Max gust potential: <b>${Math.round(gst)} mph</b>`;
+                const spdLine  = wsp != null ? `Wind speed: ${Math.round(wsp)} mph` : '';
+                const dirLine  = wdr != null ? `Direction: ${wdr * 10}°` : '';
+                lines.push(gustLine);
+                if (spdLine) lines.push(spdLine);
+                if (dirLine) lines.push(dirLine);
+            }
+            // Temp + Dew
+            const tmp = blkData.TMP; const dpt = blkData.DPT;
+            if (tmp != null) lines.push(`Temperature: <b>${Math.round(tmp)}°F</b>`);
+            if (dpt != null) lines.push(`Dewpoint: ${Math.round(dpt)}°F`);
+            // Thunder
+            const t01 = blkData.T01; const t06 = blkData.T06;
+            const thr = t01 ?? t06;
+            if (thr != null && thr > 0) lines.push(`Thunder: <b>${thr}%</b>`);
+            // Precip
+            const p01 = blkData.P01; const q01 = blkData.Q01;
+            if (p01 != null && p01 > 0) lines.push(`PoP: ${p01}%`);
+            if (q01 != null && q01 > 0) lines.push(`QPF: ${(q01/100).toFixed(2)} in/hr`);
+            // Visibility
+            const vis = blkData.VIS;
+            if (vis != null) lines.push(`Visibility: ${vis >= 100 ? '10+' : (vis/10).toFixed(1)} SM`);
+            // Snow
+            const s06 = blkData.S06;
+            if (s06 != null && s06 > 0) lines.push(`Snow: ${(s06/10).toFixed(1)} in`);
 
-                const cfg    = RISK_LEVELS[risk];
-                const bgCol  = cfg.color + '22';
-                const txtCol = risk > 0 ? cfg.color : '#71717a';
+            const hazLabel = bhaz && bhaz.risk > 0
+                ? `<div style="font-size:0.58rem;color:${bhaz.color || '#71717a'};font-weight:700;text-transform:uppercase;margin-top:3px;">${bhaz.risk_label || ''} — ${Math.round(bhaz.prob || 0)}%</div>`
+                : '';
 
-                // Met value — show P90 from block data
-                let metLine = '';
-                if (key === 'WIND' && block?.GST) {
-                    const p90g = block.GST_P90 ?? block.GST;
-                    const gCol = deciColormap('WIND', p90g);
-                    metLine = `<span style="color:${gCol || '#fff'};font-weight:800;">${Math.round(block.GST)} mph gust</span>` +
-                              `<span style="color:#71717a"> · P90: <span style="color:${deciColormap('WIND', p90g) || '#fff'}">${Math.round(p90g)} mph</span></span>`;
-                } else if (key === 'TEMPERATURE' && block?.TMP != null) {
-                    const tP90h = block.TMP_P90 ?? block.TMP;
-                    const tP10 = block.TMP_P10 ?? block.TMP;
-                    const tCol = deciColormap('COLD', block.TMP);
-                    metLine = `<span style="color:${tCol || '#fff'};font-weight:800;">${Math.round(block.TMP)}°F</span>` +
-                              `<span style="color:#71717a"> · P90: ${Math.round(tP90h)}°F / P10: ${Math.round(tP10)}°F</span>`;
-                } else if (key === 'VISIBILITY' && block?.VIS != null) {
-                    const visSM = block.VIS / 10;
-                    const vCol = deciColormap('VISIBILITY', visSM);
-                    metLine = `<span style="color:${vCol || '#fff'};font-weight:800;">${visSM >= 10 ? '10+ SM' : visSM + ' SM'}</span>`;
-                } else if (key === 'LIGHTNING') {
-                    metLine = `<span style="color:${txtCol};font-weight:800;">${Math.round(prob)}% thunder prob</span>`;
-                } else if (key === 'SNOW' && block?.S06 != null && block.S06 > 0) {
-                    const rate = ((block.S06 / 10) / 6).toFixed(2);
-                    const sCol = deciColormap('SNOW', parseFloat(rate));
-                    metLine = `<span style="color:${sCol || '#fff'};font-weight:800;">${rate} in/hr</span>`;
-                } else if (key === 'RAIN' && block?.Q01 != null && block.Q01 > 0) {
-                    const rate = (block.Q01 / 100).toFixed(2);
-                    const rCol = deciColormap('RAIN', parseFloat(rate));
-                    metLine = `<span style="color:${rCol || '#fff'};font-weight:800;">${rate} in/hr</span>`;
-                } else if (key === 'FZRA' && block?.ZR6 != null && block.ZR6 > 0) {
-                    metLine = `<span style="color:#60a5fa;font-weight:800;">${(block.ZR6/100).toFixed(3)}" / 6hr</span>`;
-                } else if (key === 'FLASH_FREEZE' && block?.TMP != null && block?.DPT != null) {
-                    const tw = block.TMP - (block.TMP - block.DPT) / 3;
-                    const ffCol = deciColormap('FLASH_FREEZE', tw);
-                    metLine = `<span style="color:${ffCol || '#fff'};font-weight:800;">Tw ${Math.round(tw)}°F</span>`;
-                }
+            const body = lines.map(l => `<div style="font-size:0.65rem;font-family:monospace;color:#e4e4e7;margin-top:2px;">${l}</div>`).join('');
 
-                rows += `<div style="margin-bottom:5px; padding:4px 6px; border-radius:3px; background:${bgCol}; border-left:3px solid ${cfg.color};">
-                    <div style="display:flex; justify-content:space-between; align-items:baseline;">
-                        <span style="font-weight:800; font-size:0.7rem; color:#e4e4e7; text-transform:uppercase;">${h.name}</span>
-                        <span style="font-size:0.65rem; font-weight:800; color:${txtCol};">${cfg.name.toUpperCase()}</span>
-                    </div>
-                    ${metLine ? `<div style="font-size:0.65rem; font-family:monospace; margin-top:2px;">${metLine}</div>` : ''}
-                    ${risk > 0 && h.prep ? `<div style="font-size:0.6rem; color:#a1a1aa; margin-top:2px;">→ ${h.prep}</div>` : ''}
-                </div>`;
-            });
-
-            const noData = !rows ? '<div style="color:#71717a; font-size:0.7rem; text-align:center; padding:8px;">No active hazards this period</div>' : '';
-
-            const tipHtml = `
-                <div style="font-size:0.7rem; font-weight:800; text-transform:uppercase; color:${headerColor}; border-bottom:1px solid #3f3f46; padding-bottom:4px; margin-bottom:6px;">
-                    ${fmt(d1)} – ${fmt(d2)}<span style="color:#52525b; font-weight:400; float:right;">${zHour}Z +${offset}h</span>
+            const tip = `
+                <div style="font-weight:800;font-size:0.68rem;color:white;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">
+                    ${timeLabel}
+                    <span style="float:right;font-weight:400;color:#52525b;font-size:0.58rem;">${zulaStr}</span>
                 </div>
-                ${rows}${noData}`;
-            showTooltip(tipHtml);
+                ${body}
+                ${hazLabel}`;
+            showTooltip(tip);
         };
 
         function getHazardTimeString(h_id, refsTimeline) {
@@ -1728,7 +1699,6 @@
                     nbmBlocks       = timelineResp.value.blocks;
                     nbmBlockHazards = timelineResp.value.block_hazards;
                     nbhHourly       = timelineResp.value.nbh_hourly || [];
-                    renderObsSparklines();
                 }
 
                 if (!liveMetar) {
@@ -1820,13 +1790,16 @@
 
                         const card = document.createElement('div');
                         const cardActive = h.prob > 0;
-                        card.className = 'ops-card flex flex-col justify-between p-3' + (cardActive ? ' ops-card-active' : ' ops-card-inactive');
-                        // Active: full colored border + subtle tinted background
+                        // Pure inline styles — no CSS class dependency for color
+                        card.className = 'ops-card flex flex-col justify-between p-3';
                         if (cardActive) {
-                            card.style.border = `3px solid ${borderColor}`;
-                            card.style.backgroundColor = borderColor + '14'; // ~8% opacity tint
+                            card.style.border           = `3px solid ${borderColor}`;
+                            card.style.backgroundColor  = borderColor + '1a';  // ~10% tint
+                            card.style.opacity          = '1';
                         } else {
-                            card.style.border = '1px solid #27272a';
+                            card.style.border           = '1px solid rgba(255,255,255,0.06)';
+                            card.style.backgroundColor  = '';
+                            card.style.opacity          = '0.38';
                         }
                         card.innerHTML = `
                             <div class="flex justify-between items-start z-10">
