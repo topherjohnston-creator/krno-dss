@@ -111,6 +111,20 @@
         /* SOP ALERT flash */
         @keyframes sop-flash { 0%{box-shadow:0 0 0 0 rgba(249,115,22,0)} 50%{box-shadow:0 0 12px 3px rgba(249,115,22,0.6)} 100%{box-shadow:0 0 0 0 rgba(249,115,22,0)} }
         .sop-alert { animation: sop-flash 1.2s infinite; border-color: #f97316 !important; }
+        /* LIVE STATUS DOT */
+        @keyframes live-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.85)} }
+        .live-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:#22c55e; animation:live-pulse 2s ease-in-out infinite; margin-right:5px; vertical-align:middle; }
+        /* TABULAR CLOCK */
+        .tabular-clock { font-variant-numeric: tabular-nums; font-feature-settings:"tnum"; font-family:'JetBrains Mono',monospace; }
+        /* TREND ARROW */
+        .trend-up { color:#f87171; font-size:0.7em; margin-left:2px; }
+        .trend-dn { color:#60a5fa; font-size:0.7em; margin-left:2px; }
+        /* ALERT CARD */
+        .alert-card { border-radius:4px; padding:10px 12px 10px 16px; background:#18181b; margin-bottom:8px; cursor:default; transition:background 0.15s; }
+        .alert-card:hover { background:#1f1f23; }
+        .alert-raw { display:none; margin-top:8px; padding:8px; background:#09090b; border-radius:3px; font-size:0.6rem; font-family:'JetBrains Mono',monospace; color:#71717a; max-height:120px; overflow-y:auto; line-height:1.5; word-break:break-word; }
+        /* SUBTLE CARD BORDERS */
+        .asos-box { border: 1px solid rgba(255,255,255,0.07) !important; }
     </style>
 </head>
 <body class="p-2 lg:p-4 h-screen box-border relative">
@@ -121,12 +135,22 @@
         
         <div class="panel p-4" style="z-index: 20;"> 
             <div class="flex justify-between items-center mb-3">
-                <div class="flex flex-col">
-                    <div style="font-family:'Oswald',sans-serif; font-size:1.05rem; font-weight:700; color:#e2e8f0; letter-spacing:0.06em; text-transform:uppercase; line-height:1.1;">
-                        Weather Decision Support
+                <div class="flex items-center gap-3">
+                    <div class="flex flex-col">
+                        <div style="font-family:'Oswald',sans-serif; font-size:1.05rem; font-weight:700; color:#e2e8f0; letter-spacing:0.06em; text-transform:uppercase; line-height:1.1;">
+                            Weather Decision Support
+                        </div>
+                        <div style="font-family:'Oswald',sans-serif; font-size:0.72rem; font-weight:500; color:#64748b; letter-spacing:0.12em; text-transform:uppercase; margin-top:1px;">
+                            Reno-Tahoe International Airport — KRNO
+                        </div>
                     </div>
-                    <div style="font-family:'Oswald',sans-serif; font-size:0.72rem; font-weight:500; color:#64748b; letter-spacing:0.12em; text-transform:uppercase; margin-top:1px;">
-                        Reno-Tahoe International Airport — KRNO
+                    <div class="flex items-center gap-2" style="margin-left:8px;">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/7/79/NOAA_logo.svg" alt="NOAA" class="h-9 w-9 drop-shadow-md opacity-80">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/f/ff/US-NationalWeatherService-Logo.svg" alt="NWS" class="h-9 w-9 drop-shadow-md opacity-80">
+                        <div class="flex flex-col justify-center">
+                            <span class="text-[9px] font-bold text-slate-500 uppercase leading-none">National</span>
+                            <span class="text-[9px] font-bold text-slate-500 uppercase leading-none">Weather Service</span>
+                        </div>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
@@ -149,9 +173,9 @@
         <div class="panel p-4" style="z-index: 10;">
             <div class="flex justify-between items-center mb-2">
                 <div class="flex items-center gap-3">
-                    <h2 class="font-bold text-base tracking-wider uppercase text-slate-300">Timeline Analysis</h2>
+                    <h2 class="font-bold text-base tracking-wider text-slate-300">Timeline Analysis</h2>
                 </div>
-                <p class="text-xs text-slate-400 font-mono tracking-tight font-bold" id="timestamp2"></p>
+                <p class="text-xs text-slate-400 tabular-clock tracking-tight font-bold" id="timestamp2"></p>
             </div>
             <div class="flex flex-col flex-grow h-full relative">
                 <div class="flex flex-grow w-full relative">
@@ -171,10 +195,10 @@
         <div class="panel p-4" style="z-index: 10;">
             <div class="flex justify-between items-center mb-2">
                  <div class="flex items-center gap-3">
-                    <h2 class="font-bold text-base tracking-wider uppercase text-slate-300">CURRENT WEATHER OBSERVATIONS</h2>
+                    <h2 class="font-bold text-base tracking-wider text-slate-300">Current Weather Observations</h2>
                     <span class="text-xs font-mono text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded border border-purple-400/20">KRNO</span>
                  </div>
-                 <div class="text-[10px] text-slate-500 font-mono" id="asos-time">--</div>
+                 <div class="flex items-center gap-1 text-[10px] text-slate-500 font-mono"><span class="live-dot" id="live-dot" style="display:none;"></span><span id="asos-time">--</span></div>
             </div>
 
             <div class="flex-grow flex gap-3 min-h-0">
@@ -231,6 +255,7 @@
                                 <polygon points="100,8 92,28 100,22 108,28" fill="#fbbf24"/>
                             </g>
                             <circle cx="100" cy="100" r="4" fill="#fbbf24"/>
+                            <circle id="calm-dot" cx="100" cy="100" r="9" fill="#fbbf24" style="display:none;" opacity="0.85"/>
                         </svg>
                     </div>
 
@@ -494,6 +519,20 @@
             // METAR + Alerts — every 60 seconds
             setInterval(() => { fetchMETAR(); fetchAlerts(); }, 60 * 1000);
 
+            // Alert countdown timers — tick every second
+            setInterval(() => {
+                (window._alertCountdowns || []).forEach(({endMs, id}) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    const rem = endMs - Date.now();
+                    if (rem <= 0) { el.textContent = 'EXPIRED'; return; }
+                    const hh = Math.floor(rem / 3600000);
+                    const mm = Math.floor((rem % 3600000) / 60000);
+                    const ss = Math.floor((rem % 60000) / 1000);
+                    el.textContent = `${String(hh).padStart(2,'0')}h ${String(mm).padStart(2,'0')}m ${String(ss).padStart(2,'0')}s`;
+                });
+            }, 1000);
+
             // REFS threats + timeline — every 30 minutes
             setInterval(() => { initDashboard(); }, 30 * 60 * 1000);
 
@@ -502,7 +541,9 @@
                 const timeEl = document.getElementById('asos-time');
                 if (timeEl && window._lastMetarFetch) {
                     const mins = Math.round((Date.now() - window._lastMetarFetch) / 60000);
-                    timeEl.textContent = mins < 1 ? 'UPDATED JUST NOW' : `UPDATED ${mins}m AGO`;
+                    timeEl.textContent = mins < 1 ? 'Updated just now' : `Updated ${mins}m ago`;
+                    const ld = document.getElementById('live-dot');
+                    if (ld) ld.style.display = mins < 3 ? 'inline-block' : 'none';
                 }
             }, 30 * 1000);
         });
@@ -819,6 +860,7 @@
 
         // --- DATA STATE ---
         let liveMetar = null;
+        let _prevObs = null;  // previous observation for trend arrows
         let liveAlerts = [];
         let cycleStartTime = null;
         let nbmBlocks = null;         // timeline.json blocks (module scope for tooltip)
@@ -1054,10 +1096,12 @@
 
         function applyMETARtoDisplay(m) {
             const wDir = m.wdir; const wSpd = m.wspd || 0; const wGst = m.wgst || 0;
-            const isCalm = wSpd === 0 && wDir === null;
+            const isCalm = wSpd === 0;  // CALM when speed=0, regardless of sensor direction noise
 
             // Wind speed/gust
-            document.getElementById('w-spd').textContent = isCalm ? 'CALM' : wSpd;
+            const spdEl = document.getElementById('w-spd');
+            spdEl.textContent = isCalm ? 'CALM' : wSpd;
+            spdEl.style.fontSize = isCalm ? '1.6rem' : '';
             document.getElementById('w-spd').style.color = isCalm ? '#71717a' : getColor('wind', Math.round(wSpd * 1.15078));
             const gstEl = document.getElementById('w-gst');
             gstEl.textContent = wGst > 0 ? wGst : '--';
@@ -1067,11 +1111,18 @@
             const wdirText = document.getElementById('wind-dir-text');
             if (wdirText) wdirText.textContent = isCalm ? 'CALM' : `${wDir}°`;
 
-            // Big wind arrow
+            // Big wind arrow — hide entirely when calm, show calm dot instead
             const arrowBig = document.getElementById('wind-arrow-big');
-            if (arrowBig) {
-                if (isCalm) arrowBig.style.opacity = '0.2';
-                else { arrowBig.style.opacity = '1'; arrowBig.setAttribute('transform', `rotate(${(wDir + 180) % 360}, 100, 100)`); }
+            const calmDot  = document.getElementById('calm-dot');
+            if (arrowBig && calmDot) {
+                if (isCalm) {
+                    arrowBig.style.display = 'none';
+                    calmDot.style.display  = 'block';
+                } else {
+                    arrowBig.style.display = '';
+                    calmDot.style.display  = 'none';
+                    arrowBig.setAttribute('transform', `rotate(${(wDir + 180) % 360}, 100, 100)`);
+                }
             }
 
             // Crosswind badge (16R/34L)
@@ -1111,7 +1162,8 @@
             const visEl = document.getElementById('vis-val');
             if (visEl) {
                 const vis = m.visib || 10;
-                visEl.textContent = vis >= 10 ? '10+ SM' : `${vis} SM`;
+                const visTrend = _prevObs ? (vis > (_prevObs.visib||10) + 0.1 ? '↑' : vis < (_prevObs.visib||10) - 0.1 ? '↓' : '') : '';
+                visEl.innerHTML = (vis >= 10 ? '10+ SM' : `${vis} SM`) + (visTrend ? `<span class="${visTrend==='↑'?'trend-up':'trend-dn'}">${visTrend}</span>` : '');
                 visEl.style.color = getColor('vis', vis);
             }
 
@@ -1137,10 +1189,17 @@
             const tC = m.temp; const dC = m.dewp;
             if (tC !== null && tC !== undefined) {
                 const tF = cToF(tC); const dF = dC !== null && dC !== undefined ? cToF(dC) : null;
-                document.getElementById('t-val').textContent = Math.round(tF);
-                document.getElementById('t-val').style.color = getColor('temp', tF);
-                document.getElementById('d-val').textContent = dF !== null ? Math.round(dF) : '--';
-                if (dF !== null) document.getElementById('d-val').style.color = getColor('dew', dF);
+                // Trend indicators
+                const tTrend = _prevObs ? (tF > _prevObs.tF + 0.5 ? '↑' : tF < _prevObs.tF - 0.5 ? '↓' : '') : '';
+                const dTrend = (_prevObs && dF !== null) ? (dF > _prevObs.dF + 0.5 ? '↑' : dF < _prevObs.dF - 0.5 ? '↓' : '') : '';
+                const tEl = document.getElementById('t-val');
+                tEl.innerHTML = Math.round(tF) + (tTrend ? `<span class="${tTrend==='↑'?'trend-up':'trend-dn'}">${tTrend}</span>` : '');
+                tEl.style.color = getColor('temp', tF);
+                const dEl = document.getElementById('d-val');
+                if (dF !== null) {
+                    dEl.innerHTML = Math.round(dF) + (dTrend ? `<span class="${dTrend==='↑'?'trend-up':'trend-dn'}">${dTrend}</span>` : '');
+                    dEl.style.color = getColor('dew', dF);
+                } else { dEl.textContent = '--'; }
                 const rhEl = document.getElementById('rh-val');
                 if (rhEl) {
                     rhEl.textContent = m.rh != null ? `RH ${m.rh}%` : 'RH --%';
@@ -1231,7 +1290,10 @@
                 const now = Date.now();
                 if (!window._lastMetarFetch) window._lastMetarFetch = now;
                 window._lastMetarFetch = now;
-                timeEl2.textContent = 'UPDATED JUST NOW';
+                _prevObs = liveMetar ? { tF: liveMetar.temp ? cToF(liveMetar.temp) : 0, dF: liveMetar.dewp ? cToF(liveMetar.dewp) : 0, visib: liveMetar.visib } : _prevObs;
+                timeEl2.textContent = 'Updated just now';
+                const liveDot = document.getElementById('live-dot');
+                if (liveDot) liveDot.style.display = 'inline-block';
             }
 
 
@@ -1285,6 +1347,28 @@
             return `${hours}${ampm}/${zulu}Z`;
         }
 
+        window.toggleAlertExpand = function(id) {
+            const el = document.getElementById('alert-raw-' + id);
+            const btn = document.getElementById('alert-expand-btn-' + id);
+            if (!el) return;
+            const open = el.style.display === 'block';
+            el.style.display = open ? 'none' : 'block';
+            if (btn) btn.textContent = open ? 'Read Full Bulletin ▾' : 'Hide Bulletin ▴';
+        };
+
+        function parseAlertHazards(headline) {
+            if (!headline) return '';
+            // Extract measurable hazards (mph, knot, inch, degree values)
+            const haz = headline.match(/\b(\d+[\s-]*(?:mph|knots?|kt|inch(?:es)?|in|°F|F)\b[^.,;]*)/gi) || [];
+            if (haz.length === 0) {
+                // Fallback: show truncated headline
+                return `<div style="font-size:0.62rem;color:#a1a1aa;margin-top:4px;line-height:1.4;">${headline.substring(0, 100)}${headline.length>100?'…':''}</div>`;
+            }
+            return '<ul style="margin-top:4px;list-style:none;padding:0;">' +
+                haz.slice(0,3).map(h => `<li style="font-size:0.62rem;color:#e4e4e7;margin-top:2px;padding-left:10px;position:relative;"><span style="position:absolute;left:0;color:#71717a;">•</span>${h.trim()}</li>`).join('') +
+                '</ul>';
+        }
+
         function renderWWA(now) {
             const wwaContainer = document.getElementById('wwa-container');
             const wwaTimeline = document.getElementById('wwa-timeline-bars');
@@ -1307,6 +1391,7 @@
             if(titleEl) titleEl.textContent = alerts.length > 0 ? wwaTitle : "NO ACTIVE WATCHES, WARNINGS, OR ADVISORIES";
 
             wwaContainer.innerHTML = ''; wwaTimeline.innerHTML = ''; wwaBg.innerHTML = ''; wwaLines.innerHTML = ''; wwaAxis.innerHTML = '';
+            window._alertCountdowns = [];  // reset countdown registrations
             
             // Empty state: hide timeline, show All Clear
             const wwaTimelineRow = wwaContainer.closest('.panel')?.querySelector('.h-24');
@@ -1344,16 +1429,34 @@
                 const startTimeLabel = getSimpleTime(now, alert.startHr);
                 const endTimeLabel = getSimpleTime(now, alert.endHr);
 
+                const cdId = `alert-cd-${index}`;
+                const rawId = `alert-raw-${index}`;
+                const btnId = `alert-expand-btn-${index}`;
+                const endMs = globalNow.getTime() + alert.endHr * 3600000;
+                
                 const listItem = document.createElement('div');
-                listItem.className = `wwa-item py-2 px-3 rounded-sm text-sm mb-2 flex justify-between items-center border-l-4 ${flashClass}`;
-                listItem.style.backgroundColor = '#27272a'; listItem.style.borderLeftColor = config.color; listItem.style.color = '#e4e4e7';
-                listItem.innerHTML = `<span class="font-bold tracking-wide uppercase">${alert.event}</span><span class="font-mono text-xs opacity-70">+${Math.round(alert.startHr)}h</span>`;
+                listItem.className = `alert-card ${flashClass}`;
+                listItem.style.borderLeft = `4px solid ${config.color}`;
+                listItem.innerHTML = `
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-weight:800;font-size:0.78rem;color:white;text-transform:uppercase;letter-spacing:0.04em;line-height:1.2;">${alert.event}</div>
+                            <div style="font-size:0.6rem;color:${config.color};margin-top:2px;font-weight:600;opacity:0.85;">NWS Reno, NV · ${startTimeLabel}–${endTimeLabel}</div>
+                        </div>
+                        <div style="flex-shrink:0;text-align:right;">
+                            <div style="font-size:0.52rem;color:#71717a;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;">Expires In</div>
+                            <div id="${cdId}" style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;font-weight:800;color:${config.color};letter-spacing:0.03em;">--:--:--</div>
+                        </div>
+                    </div>
+                    ${parseAlertHazards(alert.headline)}
+                    <div style="display:flex;justify-content:flex-end;margin-top:6px;">
+                        <span id="${btnId}" onclick="toggleAlertExpand(${index})" style="font-size:0.58rem;color:#52525b;cursor:pointer;user-select:none;padding:2px 4px;border-radius:2px;transition:color 0.1s;" onmouseenter="this.style.color='#94a3b8'" onmouseleave="this.style.color='#52525b'">Read Full Bulletin ▾</span>
+                    </div>
+                    <div id="${rawId}" class="alert-raw">${alert.headline || 'No additional details available.'}</div>`;
                 
-                const tHtml = `<div class="font-bold text-xs mb-1 text-white uppercase border-b border-gray-600 pb-1">${alert.event}</div><div class="text-[10px] text-gray-300 font-mono mb-1">Valid: ${startTimeLabel} - ${endTimeLabel}</div><div class="text-[9px] text-gray-400 italic leading-tight">${alert.headline}</div>`;
-                
-                listItem.addEventListener('mouseenter', () => showTooltip(tHtml));
-                listItem.addEventListener('mouseleave', hideTooltip);
                 wwaContainer.appendChild(listItem);
+                // Register for countdown ticks
+                (window._alertCountdowns = window._alertCountdowns || []).push({endMs, id: cdId});
 
                 const width = ((alert.endHr - alert.startHr) / TOTAL_HOURS) * 100;
                 const left = (alert.startHr / TOTAL_HOURS) * 100;
