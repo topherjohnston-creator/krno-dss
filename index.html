@@ -277,9 +277,7 @@
                 <div style="width:52%; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr; gap:8px;">
 
                     <!-- Row 1: Visibility | Sky Condition -->
-                    <div class="asos-box" style="cursor:crosshair;"
-                         onmouseenter="showObsForecast('Visibility Forecast','VIS','VISIBILITY',10,'SM',v=>v/10)"
-                         onmouseleave="hideTooltip()">
+                    <div class="asos-box">
                         <div class="asos-label">VISIBILITY</div>
                         <div class="asos-value text-white" id="vis-val">--</div>
                         <div class="asos-sub font-bold text-gray-400" id="vis-sub"></div>
@@ -704,18 +702,40 @@
         // Wind-specific sparkline (speed + gust dual bar)
         window.showWindForecast = function() {
             if (!nbhHourly || nbhHourly.length === 0) return;
-            const spark = makeDualSparkline('WSP', 'GST', '#93c5fd', '#fbbf24', 70);
-            const wdrs = nbhHourly.map(h => h.WDR != null ? h.WDR * 10 : null).filter(v => v !== null);
-            const peak_gust = Math.max(...nbhHourly.map(h => h.GST || 0));
-            const peak_idx = nbhHourly.findIndex(h => h.GST === peak_gust);
-            let peakStr = '';
-            if (peak_idx >= 0) {
+
+            // 24-hr G24 max gust from threats.json (already in mph, converted from kt in backend)
+            const g24p50 = refsThreats?.WIND?.g24_p50_mph;
+            const g24p90 = refsThreats?.WIND?.g24_p90_mph;
+
+            // Find hour with peak P90 gust = GST + 1.28 × GSD (both in mph after backend fix)
+            const p90Vals = nbhHourly.map(h => (h.GST || 0) + 1.28 * (h.GSD || 0));
+            const peakP90Val = Math.max(...p90Vals);
+            const peakIdx  = p90Vals.indexOf(peakP90Val);
+            let peakTimeStr = '';
+            if (peakIdx >= 0) {
                 const baseMs = cycleStartTime || Date.now();
-                const pd = new Date(baseMs + (nbhHourly[peak_idx].fxx || peak_idx+1) * 3600000);
-                peakStr = `<div style="font-size:0.65rem;color:#fbbf24;margin-top:4px;">Peak gust: ${Math.round(peak_gust)} mph @ ${pd.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase()} ${fmtHour(pd)}</div>`;
+                const pd = new Date(baseMs + (nbhHourly[peakIdx].fxx || peakIdx + 1) * 3600000);
+                const hh = pd.getHours(); const ap = hh >= 12 ? 'P' : 'A';
+                const dy = pd.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
+                peakTimeStr = `${dy} ${hh % 12 || 12}${ap}`;
             }
-            const tip = `<div style="font-weight:800;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:5px;">WIND FORECAST </div>${spark}${peakStr}`;
-            showTooltip(tip);
+
+            const g24Line = (g24p50 != null) ? `
+                <div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:2px;">
+                    <span style="color:#a1a1aa;">24-hr Max Gust (P50)</span>
+                    <span style="color:${deciColormap('WIND', g24p50)||'#fbbf24'};font-weight:800;">${Math.round(g24p50)} mph</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:2px;">
+                    <span style="color:#a1a1aa;">24-hr Max Gust (P90)</span>
+                    <span style="color:${deciColormap('WIND', g24p90)||'#f97316'};font-weight:800;">${Math.round(g24p90 || 0)} mph</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;padding-bottom:5px;margin-bottom:5px;border-bottom:1px solid #27272a;">
+                    <span style="color:#a1a1aa;">Peak P90 timing</span>
+                    <span style="color:#fbbf24;font-weight:800;">${peakTimeStr}</span>
+                </div>` : '';
+
+            const spark = makeDualSparkline('WSP', 'GST', '#93c5fd', '#fbbf24', 80);
+            showTooltip(`<div style="font-weight:800;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:5px;">Wind Forecast</div>${g24Line}${spark}`);
         };
 
         // Temp/Dew spread tooltip with frost warning
