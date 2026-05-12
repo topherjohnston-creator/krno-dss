@@ -27,7 +27,7 @@
 
         /* TOOLTIP */
         #global-tooltip {
-            position: fixed; top: 0; left: 0; width: 260px;
+            position: fixed; top: 0; left: 0; width: 340px;
             background-color: #09090b; border: 1px solid #52525b; color: #fff;
             padding: 12px; border-radius: 4px; font-size: 0.75rem;
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.8), 0 10px 10px -5px rgba(0, 0, 0, 0.5);
@@ -235,7 +235,8 @@
                     </div>
 
                     <!-- Speed / Gust / Direction -->
-                    <div class="w-full text-center" style="margin-top:4px;">
+                    <div class="w-full text-center" style="margin-top:4px;cursor:crosshair;"
+                         onmouseenter="showWindForecast()" onmouseleave="hideTooltip()">
                         <div style="font-family:'JetBrains Mono',monospace; font-size:2.6rem; font-weight:800; color:white; line-height:1; display:flex; align-items:baseline; justify-content:center; gap:5px;">
                             <span id="w-spd">--</span>
                             <span style="font-size:0.9rem; color:#71717a; font-weight:400;">G</span>
@@ -250,14 +251,18 @@
                 <div style="width:52%; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr; gap:8px;">
 
                     <!-- Row 1: Visibility | Sky Condition -->
-                    <div class="asos-box">
+                    <div class="asos-box" style="cursor:crosshair;"
+                         onmouseenter="showObsForecast('Visibility Forecast','VIS','VISIBILITY',10,'SM',v=>v/10)"
+                         onmouseleave="hideTooltip()">
                         <div class="asos-label">VISIBILITY</div>
                         <div class="asos-value text-white" id="vis-val">--</div>
                         <div class="asos-sub font-bold text-gray-400" id="vis-sub"></div>
                         <i class="ph-fill ph-eye absolute bottom-2 right-2 text-2xl opacity-10"></i>
                     </div>
 
-                    <div class="asos-box">
+                    <div class="asos-box" style="cursor:crosshair;"
+                         onmouseenter="showObsForecast('Cloud Cover Forecast','SKY','SKY',100,'%',null)"
+                         onmouseleave="hideTooltip()">
                         <div class="flight-cat" id="fc-badge">--</div>
                         <div class="asos-label">SKY CONDITION</div>
                         <div class="asos-value" id="sky-val">--</div>
@@ -281,7 +286,9 @@
                         <i class="ph-fill ph-thermometer-hot absolute bottom-2 right-2 text-2xl opacity-10"></i>
                     </div>
 
-                    <div class="asos-box" id="wx-card">
+                    <div class="asos-box" id="wx-card" style="cursor:crosshair;"
+                         onmouseenter="showObsForecast('Thunder Probability','T01','LIGHTNING',100,'%',null)"
+                         onmouseleave="hideTooltip()">
                         <div class="asos-label">PRESENT WEATHER</div>
                         <div class="asos-value" id="wx-icons" style="font-size:1.8rem; margin-top:2px; min-height:28px;">--</div>
                         <div id="wx-detail" class="asos-sub" style="margin-top:2px; font-size:0.60rem; line-height:1.3; color:#a1a1aa;"></div>
@@ -301,7 +308,9 @@
                         <i class="ph-fill ph-drop-half absolute bottom-2 right-2 text-2xl opacity-10"></i>
                     </div>
 
-                    <div class="asos-box">
+                    <div class="asos-box" style="cursor:crosshair;"
+                         onmouseenter="showObsForecast('Precip Rate Forecast','Q01','RAIN',2,'in',v=>v/100)"
+                         onmouseleave="hideTooltip()">
                         <div class="asos-label">1-HOUR PRECIPITATION</div>
                         <div class="asos-value" id="precip-val">--</div>
                         <div class="asos-sub" id="precip-sub" style="color:#71717a;"></div>
@@ -512,6 +521,105 @@
         function showTooltip(html) { if(tooltip) { tooltip.innerHTML = html; tooltip.classList.add('visible'); } }
         function hideTooltip() { if(tooltip) { tooltip.classList.remove('visible'); } }
 
+        // ── SPARKLINE HELPERS ────────────────────────────────────────────────────
+        function fmtHour(d) {
+            let h = d.getHours(); const ap = h >= 12 ? 'P' : 'A';
+            h = h % 12 || 12;
+            return `${h}${ap}`;
+        }
+
+        // Build a compact SVG bar sparkline from nbhHourly data
+        function makeObsSparkline(key, cmapName, maxVal, transform, unit) {
+            if (!nbhHourly || nbhHourly.length === 0) return '';
+            const baseMs = cycleStartTime || Date.now();
+            const W = 312, H = 52, BAR_W = Math.floor(W / nbhHourly.length);
+            const vals = nbhHourly.map(h => {
+                let v = h[key] != null ? h[key] : null;
+                if (v !== null && transform) v = transform(v);
+                return v;
+            });
+            const dataMax = maxVal || Math.max(...vals.filter(v => v !== null), 1);
+            let bars = '', labels = '';
+            vals.forEach((v, i) => {
+                if (v === null) return;
+                const bh = Math.max(2, Math.round((v / dataMax) * H));
+                const x = i * BAR_W;
+                const y = H - bh;
+                const col = deciColormap(cmapName, v) || '#52525b';
+                bars += `<rect x="${x}" y="${y}" width="${Math.max(BAR_W-1,1)}" height="${bh}" fill="${col}" rx="1" opacity="0.9"/>`;
+                // Labels at Now, +6h, +12h, +18h, +24h
+                if (i === 0 || i === 6 || i === 12 || i === 18 || i === 24) {
+                    const d = new Date(baseMs + (nbhHourly[i].fxx || i+1) * 3600000);
+                    const lbl = i === 0 ? 'Now' : fmtHour(d);
+                    labels += `<text x="${x + BAR_W/2}" y="${H+11}" text-anchor="middle" font-size="7.5" fill="#71717a" font-family="monospace">${lbl}</text>`;
+                }
+                // Value label on tallest bar segment
+                if (v === dataMax && v > 0) {
+                    const valStr = unit === 'mph' ? Math.round(v) + unit : v.toFixed(unit === 'in' ? 2 : 0) + unit;
+                    bars += `<text x="${x + BAR_W/2}" y="${Math.max(y-2,7)}" text-anchor="middle" font-size="7" fill="white" font-family="monospace" font-weight="bold">${valStr}</text>`;
+                }
+            });
+            return `<svg width="${W}" height="${H+16}" style="display:block;margin-top:5px;border-radius:3px;background:rgba(0,0,0,0.2);">${bars}${labels}</svg>`;
+        }
+
+        // Build dual-bar sparkline (e.g. wind speed + gust)
+        function makeDualSparkline(key1, key2, col1, col2, maxVal) {
+            if (!nbhHourly || nbhHourly.length === 0) return '';
+            const baseMs = cycleStartTime || Date.now();
+            const W = 312, H = 52, BAR_W = Math.floor(W / nbhHourly.length);
+            const v1s = nbhHourly.map(h => h[key1] != null ? h[key1] : 0);
+            const v2s = nbhHourly.map(h => h[key2] != null ? h[key2] : 0);
+            const dataMax = maxVal || Math.max(...v1s, ...v2s, 1);
+            let bars = '', labels = '';
+            v1s.forEach((v1, i) => {
+                const v2 = v2s[i];
+                const x = i * BAR_W;
+                const h2 = Math.max(2, Math.round((v2 / dataMax) * H));
+                const h1 = Math.max(2, Math.round((v1 / dataMax) * H));
+                // Gust bar (taller, amber)
+                bars += `<rect x="${x}" y="${H-h2}" width="${Math.max(BAR_W-1,1)}" height="${h2}" fill="${deciColormap('WIND', v2) || col2}" rx="1" opacity="0.85"/>`;
+                // Speed overlay (shorter, muted)
+                bars += `<rect x="${x}" y="${H-h1}" width="${Math.max(BAR_W-1,1)}" height="${h1}" fill="${col1}" rx="1" opacity="0.6"/>`;
+                if (i === 0 || i === 6 || i === 12 || i === 18 || i === 24) {
+                    const d = new Date(baseMs + (nbhHourly[i].fxx || i+1) * 3600000);
+                    const lbl = i === 0 ? 'Now' : fmtHour(d);
+                    labels += `<text x="${x + BAR_W/2}" y="${H+11}" text-anchor="middle" font-size="7.5" fill="#71717a" font-family="monospace">${lbl}</text>`;
+                }
+            });
+            const peakGust = Math.max(...v2s);
+            const peakSpd = Math.max(...v1s);
+            return `<div style="font-size:0.6rem;color:#71717a;margin-bottom:2px;"><span style="color:#fbbf24;">■</span> Gust peak: ${Math.round(peakGust)} mph &nbsp; <span style="color:#93c5fd;">■</span> Speed peak: ${Math.round(peakSpd)} mph</div><svg width="${W}" height="${H+16}" style="display:block;border-radius:3px;background:rgba(0,0,0,0.2);">${bars}${labels}</svg>`;
+        }
+
+        // Generic obs sparkline tooltip
+        window.showObsForecast = function(title, key, cmapName, maxVal, unit, transform) {
+            if (!nbhHourly || nbhHourly.length === 0) {
+                showTooltip(`<div style="color:#71717a;font-size:0.7rem;">No NBH forecast data loaded</div>`); return;
+            }
+            const spark = makeObsSparkline(key, cmapName, maxVal, transform, unit);
+            const vals = nbhHourly.map(h => h[key]).filter(v => v != null);
+            const peak = transform ? Math.max(...vals.map(transform)) : Math.max(...vals);
+            const tip = `<div style="font-weight:800;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:5px;">${title} <span style="color:#52525b;font-size:0.55rem;float:right;font-weight:400;">NBH 25-hr Forecast</span></div>${spark}`;
+            showTooltip(tip);
+        };
+
+        // Wind-specific sparkline (speed + gust dual bar)
+        window.showWindForecast = function() {
+            if (!nbhHourly || nbhHourly.length === 0) return;
+            const spark = makeDualSparkline('WSP', 'GST', '#93c5fd', '#fbbf24', 70);
+            const wdrs = nbhHourly.map(h => h.WDR != null ? h.WDR * 10 : null).filter(v => v !== null);
+            const peak_gust = Math.max(...nbhHourly.map(h => h.GST || 0));
+            const peak_idx = nbhHourly.findIndex(h => h.GST === peak_gust);
+            let peakStr = '';
+            if (peak_idx >= 0) {
+                const baseMs = cycleStartTime || Date.now();
+                const pd = new Date(baseMs + (nbhHourly[peak_idx].fxx || peak_idx+1) * 3600000);
+                peakStr = `<div style="font-size:0.65rem;color:#fbbf24;margin-top:4px;">Peak gust: ${Math.round(peak_gust)} mph @ ${pd.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase()} ${fmtHour(pd)}</div>`;
+            }
+            const tip = `<div style="font-weight:800;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:5px;">WIND FORECAST <span style="color:#52525b;font-size:0.55rem;float:right;font-weight:400;">NBH 25-hr</span></div>${spark}${peakStr}`;
+            showTooltip(tip);
+        };
+
         // Temp/Dew spread tooltip with frost warning
         window.showTempDewTooltip = function() {
             if (!liveMetar) return;
@@ -521,15 +629,16 @@
             const spread = tF - dF;
             const spreadColor = spread <= 5 ? '#facc15' : spread <= 10 ? '#a1a1aa' : '#52525b';
             const frostWarn  = spread <= 5 ? '<div style="color:#facc15;font-weight:800;font-size:0.65rem;margin-top:4px;">⚠ FROST / FREEZING FOG POSSIBLE</div>' : '';
+            const spark = makeObsSparkline('TMP', 'TEMPERATURE', 120, null, '°F');
             const html = `
-                <div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:6px;">TEMP / DEW ANALYSIS</div>
+                <div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:5px;">TEMP / DEW ANALYSIS <span style="color:#52525b;font-size:0.55rem;float:right;font-weight:400;">NBH 25-hr</span></div>
                 <div style="font-family:monospace;font-size:0.72rem;display:flex;flex-direction:column;gap:3px;">
                     <div style="display:flex;justify-content:space-between;"><span style="color:#a1a1aa;">AIR TEMP</span><span style="font-weight:800;color:white;">${tF}°F</span></div>
                     <div style="display:flex;justify-content:space-between;"><span style="color:#a1a1aa;">DEWPOINT</span><span style="font-weight:800;color:#60a5fa;">${dF}°F</span></div>
                     <div style="display:flex;justify-content:space-between;border-top:1px solid #3f3f46;padding-top:3px;"><span style="color:#a1a1aa;">T/D SPREAD</span><span style="font-weight:800;color:${spreadColor};">${spread}°F</span></div>
                     ${liveMetar.rh != null ? `<div style="display:flex;justify-content:space-between;"><span style="color:#a1a1aa;">REL HUMIDITY</span><span style="font-weight:800;color:white;">${liveMetar.rh}%</span></div>` : ''}
                 </div>
-                ${frostWarn}`;
+                ${frostWarn}${spark}`;
             showTooltip(html);
         };
 
@@ -714,6 +823,7 @@
         let cycleStartTime = null;
         let nbmBlocks = null;         // timeline.json blocks (module scope for tooltip)
         let nbmBlockHazards = null;   // timeline.json block_hazards
+        let nbhHourly = [];           // raw NBH hourly data (1-hr resolution, fxx 1-25)
 
         function setStatus(msg, color) {
             const el = document.getElementById('fetch-status');
@@ -1303,108 +1413,82 @@
         }
 
 
-        // ── DESI Colormaps for Timeline (ensemble mean display) ──────────────
+        // ── DESI Colormaps — matched to provided PDF colorbars ───────────────
         const DESI_CMAPS = {
-            WIND: [  // mph
-                {max:5,   rgb:[200,220,220]}, {max:10,  rgb:[100,200,210]},
-                {max:15,  rgb:[50,180,190]},  {max:20,  rgb:[30,160,170]},
-                {max:25,  rgb:[20,140,150]},  {max:30,  rgb:[240,220,20]},
-                {max:40,  rgb:[240,160,20]},  {max:50,  rgb:[220,60,20]},
-                {max:60,  rgb:[180,20,20]},   {max:70,  rgb:[160,20,80]},
-                {max:80,  rgb:[180,20,180]},  {max:90,  rgb:[200,100,200]},
-                {max:100, rgb:[160,0,220]},   {max:999, rgb:[120,0,180]},
+            // 10m Wind Gust (mph)
+            WIND: [
+                {max:5,   rgb:[210,210,210]}, {max:10,  rgb:[160,210,230]},
+                {max:15,  rgb:[90,190,210]},  {max:20,  rgb:[40,170,190]},
+                {max:25,  rgb:[10,145,160]},  {max:30,  rgb:[235,235,30]},
+                {max:35,  rgb:[240,190,20]},  {max:40,  rgb:[235,110,20]},
+                {max:45,  rgb:[220,50,20]},   {max:50,  rgb:[190,20,20]},
+                {max:60,  rgb:[140,5,10]},    {max:70,  rgb:[100,0,20]},
+                {max:80,  rgb:[70,0,60]},     {max:999, rgb:[50,0,90]},
             ],
-            VISIBILITY: [  // SM
-                {max:0.1,  rgb:[20,0,40]},    {max:0.25, rgb:[80,0,120]},
-                {max:0.5,  rgb:[150,0,180]},  {max:1,    rgb:[200,0,60]},
-                {max:2,    rgb:[220,100,80]}, {max:3,    rgb:[240,210,20]},
-                {max:4,    rgb:[230,230,150]},{max:5,    rgb:[200,210,200]},
-                {max:10,   rgb:[180,190,180]},{max:999,  rgb:[220,225,220]},
+            // Visibility (SM) — darker = worse
+            VISIBILITY: [
+                {max:0.1,  rgb:[10,0,30]},    {max:0.25, rgb:[60,0,100]},
+                {max:0.5,  rgb:[130,0,160]},  {max:1,    rgb:[190,0,50]},
+                {max:2,    rgb:[215,90,60]},  {max:3,    rgb:[235,210,30]},
+                {max:4,    rgb:[220,225,140]},{max:5,    rgb:[190,205,190]},
+                {max:10,   rgb:[170,185,170]},{max:999,  rgb:[220,225,220]},
             ],
-            SNOW: [  // in/hr
-                {max:0.1,  rgb:[200,230,240]},{max:0.2,  rgb:[150,200,230]},
-                {max:0.3,  rgb:[100,170,220]},{max:0.5,  rgb:[60,130,200]},
-                {max:0.75, rgb:[30,90,180]},  {max:1.0,  rgb:[20,60,160]},
-                {max:1.25, rgb:[30,140,80]},  {max:1.5,  rgb:[100,180,50]},
-                {max:1.75, rgb:[200,210,20]}, {max:2.0,  rgb:[230,140,20]},
-                {max:2.5,  rgb:[210,50,20]},  {max:3.0,  rgb:[150,20,20]},
-                {max:999,  rgb:[100,10,10]},
+            // 1 Hour Snowfall (in) — from PDF
+            SNOW: [
+                {max:0.1,  rgb:[210,235,250]},{max:0.2,  rgb:[150,200,240]},
+                {max:0.3,  rgb:[90,160,225]}, {max:0.5,  rgb:[50,120,205]},
+                {max:0.75, rgb:[20,80,180]},  {max:1.0,  rgb:[10,55,160]},
+                {max:1.25, rgb:[20,140,70]},  {max:1.5,  rgb:[80,175,40]},
+                {max:1.75, rgb:[195,215,15]}, {max:2.0,  rgb:[235,165,20]},
+                {max:2.5,  rgb:[215,80,20]},  {max:3.0,  rgb:[160,20,20]},
+                {max:999,  rgb:[110,5,5]},
             ],
-            RAIN: [  // in/hr
-                {max:0.05, rgb:[150,220,220]},{max:0.15, rgb:[50,180,160]},
-                {max:0.25, rgb:[20,150,80]},  {max:0.75, rgb:[100,180,30]},
-                {max:1.5,  rgb:[230,200,20]}, {max:2.5,  rgb:[230,100,20]},
-                {max:3.5,  rgb:[200,30,30]},  {max:5.0,  rgb:[100,0,180]},
-                {max:999,  rgb:[60,0,130]},
+            // 1 Hour Precipitation (in) — from PDF
+            RAIN: [
+                {max:0.05, rgb:[140,215,215]},{max:0.15, rgb:[40,175,155]},
+                {max:0.25, rgb:[15,145,75]},  {max:0.75, rgb:[90,175,25]},
+                {max:1.5,  rgb:[225,200,15]}, {max:2.5,  rgb:[230,95,15]},
+                {max:3.5,  rgb:[195,25,25]},  {max:5.0,  rgb:[90,0,170]},
+                {max:999,  rgb:[55,0,125]},
             ],
-            FZRA: [  // categorical mean (0-1)
-                {max:0.05, rgb:[20,20,60]},   {max:0.1,  rgb:[30,30,120]},
-                {max:0.2,  rgb:[60,60,180]},  {max:0.3,  rgb:[100,20,200]},
-                {max:999,  rgb:[160,0,220]},
+            // 1 Hour Freezing Rain (in, 1:1 ratio) — from PDF
+            FZRA: [
+                {max:0.01, rgb:[250,250,240]},{max:0.05, rgb:[235,225,20]},
+                {max:0.1,  rgb:[235,120,15]}, {max:0.15, rgb:[195,20,20]},
+                {max:0.2,  rgb:[120,0,10]},   {max:0.25, rgb:[100,0,140]},
+                {max:999,  rgb:[70,0,130]},
             ],
-            LIGHTNING: [  // flashes/km2/5min
-                {max:0.01, rgb:[160,160,160]},{max:0.02, rgb:[200,180,120]},
-                {max:0.5,  rgb:[230,180,20]}, {max:1,    rgb:[230,100,20]},
-                {max:2,    rgb:[200,30,30]},  {max:3,    rgb:[180,20,100]},
-                {max:4,    rgb:[180,20,180]}, {max:5,    rgb:[160,0,220]},
-                {max:999,  rgb:[120,0,200]},
+            // Lightning probability (%) — amber/gold intensity
+            LIGHTNING: [
+                {max:5,   rgb:[160,140,80]},  {max:10,  rgb:[200,170,30]},
+                {max:25,  rgb:[225,195,15]},  {max:50,  rgb:[230,130,20]},
+                {max:75,  rgb:[210,50,20]},   {max:999, rgb:[160,0,160]},
             ],
-            HAIL: [  // inches
-                {max:0.1,  rgb:[200,230,240]},{max:0.25, rgb:[100,180,220]},
-                {max:0.5,  rgb:[50,130,200]}, {max:1.0,  rgb:[200,200,20]},
-                {max:999,  rgb:[220,60,20]},
+            // Temperature (°F) — Max and Min use same colormap (from PDF)
+            TEMPERATURE: [
+                {max:-60, rgb:[200,0,130]},   {max:-40, rgb:[210,30,100]},
+                {max:-20, rgb:[220,140,180]},  {max:0,   rgb:[230,230,250]},
+                {max:20,  rgb:[160,200,235]},  {max:32,  rgb:[100,170,220]},
+                {max:40,  rgb:[60,190,200]},   {max:50,  rgb:[40,170,110]},
+                {max:60,  rgb:[100,185,60]},   {max:70,  rgb:[215,230,30]},
+                {max:80,  rgb:[240,180,20]},   {max:90,  rgb:[230,80,20]},
+                {max:100, rgb:[185,15,15]},    {max:110, rgb:[120,0,10]},
+                {max:999, rgb:[80,0,30]},
             ],
-            // Exact DESI 2m Temperature colormap (°F)
-            COLD: [
-                {max:-55, rgb:[145,0,63]},    {max:-50, rgb:[206,18,86]},
-                {max:-45, rgb:[231,41,138]},  {max:-40, rgb:[223,101,176]},
-                {max:-35, rgb:[255,115,223]}, {max:-30, rgb:[255,190,232]},
-                {max:-25, rgb:[255,255,255]}, {max:-20, rgb:[218,218,235]},
-                {max:-15, rgb:[188,189,220]}, {max:-10, rgb:[158,154,200]},
-                {max:-5,  rgb:[117,107,177]}, {max:0,   rgb:[84,39,143]},
-                {max:5,   rgb:[13,0,125]},    {max:10,  rgb:[13,61,156]},
-                {max:15,  rgb:[0,102,194]},   {max:20,  rgb:[41,158,255]},
-                {max:25,  rgb:[74,199,255]},  {max:30,  rgb:[115,215,255]},
-                {max:35,  rgb:[173,255,255]}, {max:40,  rgb:[48,207,194]},
-                {max:45,  rgb:[0,153,150]},   {max:50,  rgb:[18,87,87]},
-                {max:55,  rgb:[6,109,44]},    {max:60,  rgb:[49,163,84]},
-                {max:65,  rgb:[116,196,118]}, {max:70,  rgb:[161,217,155]},
-                {max:75,  rgb:[211,255,190]}, {max:80,  rgb:[255,255,179]},
-                {max:85,  rgb:[255,237,160]}, {max:90,  rgb:[254,209,118]},
-                {max:95,  rgb:[254,174,42]},  {max:100, rgb:[253,141,60]},
-                {max:105, rgb:[252,78,42]},   {max:110, rgb:[227,26,28]},
-                {max:115, rgb:[177,0,38]},    {max:120, rgb:[128,0,38]},
-                {max:125, rgb:[89,0,66]},     {max:999, rgb:[40,0,40]},
+            // Alias COLD/HEAT to TEMPERATURE for backwards compat
+            get COLD() { return this.TEMPERATURE; },
+            get HEAT() { return this.TEMPERATURE; },
+            // Cloud coverage (%) — clear=blue, overcast=grey
+            SKY: [
+                {max:10,  rgb:[70,130,200]},  {max:25,  rgb:[120,160,200]},
+                {max:50,  rgb:[150,160,170]}, {max:75,  rgb:[110,115,120]},
+                {max:90,  rgb:[75,78,82]},    {max:999, rgb:[50,52,55]},
             ],
-            HEAT: [  // Same DESI temp colormap
-                {max:-55, rgb:[145,0,63]},    {max:-50, rgb:[206,18,86]},
-                {max:-45, rgb:[231,41,138]},  {max:-40, rgb:[223,101,176]},
-                {max:-35, rgb:[255,115,223]}, {max:-30, rgb:[255,190,232]},
-                {max:-25, rgb:[255,255,255]}, {max:-20, rgb:[218,218,235]},
-                {max:-15, rgb:[188,189,220]}, {max:-10, rgb:[158,154,200]},
-                {max:-5,  rgb:[117,107,177]}, {max:0,   rgb:[84,39,143]},
-                {max:5,   rgb:[13,0,125]},    {max:10,  rgb:[13,61,156]},
-                {max:15,  rgb:[0,102,194]},   {max:20,  rgb:[41,158,255]},
-                {max:25,  rgb:[74,199,255]},  {max:30,  rgb:[115,215,255]},
-                {max:35,  rgb:[173,255,255]}, {max:40,  rgb:[48,207,194]},
-                {max:45,  rgb:[0,153,150]},   {max:50,  rgb:[18,87,87]},
-                {max:55,  rgb:[6,109,44]},    {max:60,  rgb:[49,163,84]},
-                {max:65,  rgb:[116,196,118]}, {max:70,  rgb:[161,217,155]},
-                {max:75,  rgb:[211,255,190]}, {max:80,  rgb:[255,255,179]},
-                {max:85,  rgb:[255,237,160]}, {max:90,  rgb:[254,209,118]},
-                {max:95,  rgb:[254,174,42]},  {max:100, rgb:[253,141,60]},
-                {max:105, rgb:[252,78,42]},   {max:110, rgb:[227,26,28]},
-                {max:115, rgb:[177,0,38]},    {max:120, rgb:[128,0,38]},
-                {max:125, rgb:[89,0,66]},     {max:999, rgb:[40,0,40]},
-            ],
-            FLASH_FREEZE: [  // wet bulb °F — impact table thresholds
-                // <25F=L5 extreme, 25-28=L4 major, 28-32=L3 moderate, 32-36=L2 minor
-                {max:25,   rgb:[150,0,180]},   // extreme — deep purple
-                {max:28,   rgb:[200,0,60]},    // major — red
-                {max:32,   rgb:[230,100,20]},  // moderate — orange
-                {max:36,   rgb:[240,210,20]},  // minor — yellow
-                {max:40,   rgb:[160,210,230]}, // below concern — light blue
-                {max:999,  rgb:[200,230,200]}, // warm — pale green
+            // Flash Freeze wet-bulb °F
+            FLASH_FREEZE: [
+                {max:25,  rgb:[140,0,170]},   {max:28,  rgb:[195,0,55]},
+                {max:32,  rgb:[225,95,15]},   {max:36,  rgb:[235,205,15]},
+                {max:40,  rgb:[150,205,225]}, {max:999, rgb:[195,225,195]},
             ],
         };
 
@@ -1467,6 +1551,7 @@
                 if (timelineResp.status === 'fulfilled' && timelineResp.value.blocks) {
                     nbmBlocks       = timelineResp.value.blocks;
                     nbmBlockHazards = timelineResp.value.block_hazards;
+                    nbhHourly       = timelineResp.value.nbh_hourly || [];
                 }
 
                 if (!liveMetar) {
