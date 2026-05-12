@@ -190,6 +190,11 @@
                 <div class="h-10 flex w-full pl-24 relative mt-1">
                     <div id="timeline-axis" class="w-full h-full relative text-xs text-slate-400"></div>
                 </div>
+                <!-- Forecast cycle freshness indicator -->
+                <div class="flex justify-end items-center mt-1" style="padding-right:4px;">
+                    <span id="cycle-fresh-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;flex-shrink:0;"></span>
+                    <span id="cycle-fresh-label" class="text-slate-500 font-mono" style="font-size:0.6rem;"></span>
+                </div>
             </div>
         </div>
 
@@ -701,23 +706,22 @@
 
         // Wind-specific sparkline (speed + gust dual bar)
         window.showWindForecast = function() {
-            if (!nbhHourly || nbhHourly.length === 0) return;
-
-            // 24-hr G24 max gust from threats.json (already in mph, converted from kt in backend)
+            // G24 24-hr max gust from threats.json (mph, converted from kt in backend)
             const g24p50 = refsThreats?.WIND?.g24_p50_mph;
             const g24p90 = refsThreats?.WIND?.g24_p90_mph;
 
-            // Find hour with peak P90 gust = GST + 1.28 × GSD (both in mph after backend fix)
-            const p90Vals = nbhHourly.map(h => (h.GST || 0) + 1.28 * (h.GSD || 0));
-            const peakP90Val = Math.max(...p90Vals);
-            const peakIdx  = p90Vals.indexOf(peakP90Val);
+            // P90 timing: hour where GST + 1.28×GSD is maximum
             let peakTimeStr = '';
-            if (peakIdx >= 0) {
-                const baseMs = cycleStartTime || Date.now();
-                const pd = new Date(baseMs + (nbhHourly[peakIdx].fxx || peakIdx + 1) * 3600000);
-                const hh = pd.getHours(); const ap = hh >= 12 ? 'P' : 'A';
-                const dy = pd.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
-                peakTimeStr = `${dy} ${hh % 12 || 12}${ap}`;
+            if (nbhHourly && nbhHourly.length > 0) {
+                const p90Vals = nbhHourly.map(h => (h.GST || 0) + 1.28 * (h.GSD || 0));
+                const peakIdx = p90Vals.indexOf(Math.max(...p90Vals));
+                if (peakIdx >= 0) {
+                    const baseMs = cycleStartTime || Date.now();
+                    const pd = new Date(baseMs + (nbhHourly[peakIdx].fxx || peakIdx + 1) * 3600000);
+                    const hh = pd.getHours(); const ap = hh >= 12 ? 'P' : 'A';
+                    const dy = pd.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
+                    peakTimeStr = `${dy} ${hh % 12 || 12}${ap}`;
+                }
             }
 
             const g24Line = (g24p50 != null) ? `
@@ -727,14 +731,17 @@
                 </div>
                 <div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:2px;">
                     <span style="color:#a1a1aa;">24-hr Max Gust (P90)</span>
-                    <span style="color:${deciColormap('WIND', g24p90)||'#f97316'};font-weight:800;">${Math.round(g24p90 || 0)} mph</span>
+                    <span style="color:${deciColormap('WIND', g24p90||g24p50)||'#f97316'};font-weight:800;">${Math.round(g24p90||g24p50)} mph</span>
                 </div>
-                <div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;padding-bottom:5px;margin-bottom:5px;border-bottom:1px solid #27272a;">
+                ${peakTimeStr ? `<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;padding-bottom:5px;margin-bottom:5px;border-bottom:1px solid #27272a;">
                     <span style="color:#a1a1aa;">Peak P90 timing</span>
                     <span style="color:#fbbf24;font-weight:800;">${peakTimeStr}</span>
-                </div>` : '';
+                </div>` : ''}` : '<div style="color:#71717a;font-size:0.65rem;font-family:monospace;margin-bottom:6px;">G24 data loading...</div>';
 
-            const spark = makeDualSparkline('WSP', 'GST', '#93c5fd', '#fbbf24', 80);
+            const spark = (nbhHourly && nbhHourly.length > 0)
+                ? makeDualSparkline('WSP', 'GST', '#93c5fd', '#fbbf24', 80)
+                : '<div style="color:#52525b;font-size:0.65rem;text-align:center;padding:8px;">Hourly forecast loading...</div>';
+
             showTooltip(`<div style="font-weight:800;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:5px;">Wind Forecast</div>${g24Line}${spark}`);
         };
 
@@ -870,7 +877,7 @@
 
         function getHazardTimeString(h_id, refsTimeline) {
             if (!refsTimeline) return "";
-            const hazardMapping = { 'Cold': 'COLD', 'Heat': 'HEAT', 'FlashFreeze': 'FLASH_FREEZE' };
+            const hazardMapping = { 'Cold': 'COLD', 'Heat': 'HEAT', 'Temperature': 'TEMPERATURE', 'FlashFreeze': 'FLASH_FREEZE' };
             const refKey = hazardMapping[h_id] || h_id.toUpperCase();
             const tData = refsTimeline[refKey];
             if (!tData) return "";
@@ -1384,7 +1391,7 @@
         // --- GET REFS RISK LEVEL FROM TIMELINE JSON ---
         function getRiskForVariable(id, i, refsTimeline) {
             if (!refsTimeline) return 0; // Grey out if REFS failed
-            const hazardMapping = { 'Cold': 'COLD', 'Heat': 'HEAT', 'FlashFreeze': 'FLASH_FREEZE' };
+            const hazardMapping = { 'Cold': 'COLD', 'Heat': 'HEAT', 'Temperature': 'TEMPERATURE', 'FlashFreeze': 'FLASH_FREEZE' };
             const refKey = hazardMapping[id] || id.toUpperCase();
             
             const hourData = refsTimeline[refKey];
@@ -1728,7 +1735,26 @@
                     // cycle_utc_iso is "YYYY-MM-DDTHH:00:00Z" — parse as UTC cycle start
                     // peak_start_fxx values in threats.json are offsets from this time
                     const iso = threatsResp.value.cycle_utc_iso;
-                    if (iso) cycleStartTime = new Date(iso).getTime();
+                    if (iso) {
+                        cycleStartTime = new Date(iso).getTime();
+                        // Freshness indicator
+                        const ageMs  = Date.now() - cycleStartTime;
+                        const ageHrs = ageMs / 3600000;
+                        const fresh  = ageHrs < 3;
+                        const dot   = document.getElementById('cycle-fresh-dot');
+                        const label = document.getElementById('cycle-fresh-label');
+                        if (dot && label) {
+                            const cycD = new Date(cycleStartTime);
+                            const mo   = cycD.toLocaleDateString('en-US', {month:'short'});
+                            const dy   = cycD.getDate();
+                            const yr   = cycD.getFullYear();
+                            const zHH  = String(cycD.getUTCHours()).padStart(2,'0');
+                            dot.style.background   = fresh ? '#22c55e' : '#ef4444';
+                            dot.style.animation    = fresh ? 'live-pulse 2s ease-in-out infinite' : 'sop-flash 1.5s infinite';
+                            label.textContent = `${mo} ${dy}, ${yr} ${zHH}:00Z`;
+                            label.style.color = fresh ? '#52525b' : '#7f1d1d';
+                        }
+                    }
                 }
 
                 // NBM blocks from timeline.json (assigned to module-scope vars)
