@@ -121,20 +121,16 @@
         
         <div class="panel p-4" style="z-index: 20;"> 
             <div class="flex justify-between items-center mb-3">
-                <div class="flex items-center gap-4">
-                    <div class="flex items-center gap-3">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/7/79/NOAA_logo.svg" alt="NOAA" class="h-10 w-10 drop-shadow-md">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/f/ff/US-NationalWeatherService-Logo.svg" alt="NWS" class="h-10 w-10 drop-shadow-md">
-                        <div class="flex flex-col justify-center ml-1">
-                            <span class="text-[10px] font-bold text-slate-500 uppercase leading-none">National</span>
-                            <span class="text-[10px] font-bold text-slate-500 uppercase leading-none">Weather Service</span>
-                        </div>
+                <div class="flex flex-col">
+                    <div style="font-family:'Oswald',sans-serif; font-size:1.05rem; font-weight:700; color:#e2e8f0; letter-spacing:0.06em; text-transform:uppercase; line-height:1.1;">
+                        Weather Decision Support
                     </div>
-                    <div class="h-8 w-px bg-slate-700"></div>
-                    <h2 class="font-bold text-sm tracking-wider uppercase text-slate-400">Threat Matrix</h2>
+                    <div style="font-family:'Oswald',sans-serif; font-size:0.72rem; font-weight:500; color:#64748b; letter-spacing:0.12em; text-transform:uppercase; margin-top:1px;">
+                        Reno-Tahoe International Airport — KRNO
+                    </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    
+                    <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Threat Matrix</span>
                 </div>
             </div>
             
@@ -318,7 +314,15 @@
 
         <div class="panel p-4 flex flex-col" style="z-index: 20;">
             <div class="flex justify-between items-center mb-2">
-                <h2 id="wwa-title-text" class="font-bold text-base tracking-wider uppercase text-slate-300">ACTIVE WATCHES, WARNINGS & ADVISORIES</h2>
+                <h2 id="wwa-title-text" class="font-bold text-sm tracking-wider uppercase text-slate-300">ACTIVE WATCHES, WARNINGS & ADVISORIES</h2>
+                <div class="flex items-center gap-2">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/7/79/NOAA_logo.svg" alt="NOAA" class="h-7 w-7 drop-shadow-md opacity-70">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/f/ff/US-NationalWeatherService-Logo.svg" alt="NWS" class="h-7 w-7 drop-shadow-md opacity-70">
+                    <div class="flex flex-col justify-center">
+                        <span class="text-[9px] font-bold text-slate-600 uppercase leading-none">National</span>
+                        <span class="text-[9px] font-bold text-slate-600 uppercase leading-none">Weather Service</span>
+                    </div>
+                </div>
             </div>
             
             <div class="h-24 border-b border-[#27272a] pb-3 mb-2 relative flex-shrink-0 flex">
@@ -1495,8 +1499,11 @@
                         return { ...h, prob, risk }; 
                     });
 
-                    // Sort purely by probability descending
-                    hazards.sort((a, b) => b.prob - a.prob);
+                    // Sort: risk level DESC (most severe first), then prob DESC as tiebreaker
+                    hazards.sort((a, b) => {
+                        if (b.risk !== a.risk) return b.risk - a.risk;
+                        return b.prob - a.prob;
+                    });
 
                     hazards.forEach(h => {
                         const isGrey = h.risk === 0;
@@ -1514,7 +1521,7 @@
                         const FALLBACK_METRICS = {
                             'WIND':        {2:'30-45 mph',    3:'45-58 mph',     4:'58-65 mph',   5:'>65 mph'},
                             'SNOW':        {2:'T-0.5"/hr',    3:'0.5-1"/hr',     4:'1-2"/hr',     5:'>2"/hr'},
-                            'LIGHTNING':   {2:'5-25%',        3:'25-50%',        4:'50-75%',      5:'>75%'},
+                            'LIGHTNING':   {1:'<5%', 2:'5-25%',        3:'25-50%',        4:'50-75%',      5:'>75%'},
                             'VISIBILITY':  {2:'3-5 SM',       3:'1-3 SM',        4:'0.5-1 SM',    5:'<0.5 SM'},
                             'RAIN':        {2:'0.1-0.25"/hr', 3:'0.25-0.5"/hr',  4:'0.5-1"/hr',   5:'>1"/hr'},
                             'FZRA':        {2:'Trace',        3:'Trace-0.01"',   4:'0.01-0.1"',   5:'>0.1"'},
@@ -1554,7 +1561,7 @@
                         card.className = 'ops-card flex flex-col justify-between p-3' + (cardActive ? ' ops-card-active' : ' ops-card-inactive');
                         // Active: full colored border + subtle tinted background
                         if (cardActive) {
-                            card.style.border = `2px solid ${borderColor}`;
+                            card.style.border = `3px solid ${borderColor}`;
                             card.style.backgroundColor = borderColor + '14'; // ~8% opacity tint
                         } else {
                             card.style.border = '1px solid #27272a';
