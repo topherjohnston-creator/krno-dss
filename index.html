@@ -97,6 +97,20 @@
         .wind-stats { width: 100%; text-align: center; margin-top: -5px; z-index: 20; position: relative; }
         .wind-speed-row { font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 800; color: white; line-height: 1; display: flex; align-items: baseline; justify-content: center; gap: 4px; }
         .wind-dir-text { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; font-weight: 700; color: #a1a1aa; margin-top: 0px; }
+
+        /* ACTIVE CARD: subtle tinted background + thicker full border */
+        .ops-card-active { border: 2px solid !important; }
+        /* INACTIVE CARD: deeply dimmed */
+        .ops-card-inactive { opacity: 0.38; }
+        .ops-card-inactive:hover { opacity: 0.65; }
+        /* PROB LABEL */
+        .prob-label { font-size: 0.48rem; font-weight: 800; letter-spacing: 0.12em; color: #71717a; padding-top: 4px; text-transform: uppercase; }
+        /* TIMELINE ZEBRA */
+        .timeline-row-odd  { background: rgba(255,255,255,0.018); }
+        .timeline-row-even { background: rgba(0,0,0,0.12); }
+        /* SOP ALERT flash */
+        @keyframes sop-flash { 0%{box-shadow:0 0 0 0 rgba(249,115,22,0)} 50%{box-shadow:0 0 12px 3px rgba(249,115,22,0.6)} 100%{box-shadow:0 0 0 0 rgba(249,115,22,0)} }
+        .sop-alert { animation: sop-flash 1.2s infinite; border-color: #f97316 !important; }
     </style>
 </head>
 <body class="p-2 lg:p-4 h-screen box-border relative">
@@ -181,7 +195,8 @@
 
                     <!-- Large wind rose -->
                     <div style="flex:1; width:100%; display:flex; align-items:center; justify-content:center; min-height:0; padding:4px 0;">
-                        <svg viewBox="0 0 200 200" style="width:100%;height:100%;max-height:200px;" preserveAspectRatio="xMidYMid meet">
+                        <svg viewBox="0 0 200 200" style="width:100%;height:100%;max-height:200px;cursor:crosshair;" preserveAspectRatio="xMidYMid meet"
+                             onmouseenter="showWindRoseTooltip()" onmouseleave="hideTooltip()">
                             <!-- Range rings -->
                             <circle cx="100" cy="100" r="90" fill="none" stroke="#3f3f46" stroke-width="1"/>
                             <circle cx="100" cy="100" r="60" fill="none" stroke="#3f3f46" stroke-width="0.5" stroke-dasharray="3,3"/>
@@ -216,8 +231,8 @@
                             <text x="32" y="135" fill="#52525b" font-size="6.5" font-family="monospace">26</text>
                             <!-- Wind arrow group -->
                             <g id="wind-arrow-big" transform="rotate(0, 100, 100)">
-                                <line x1="100" y1="100" x2="100" y2="20" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
-                                <polygon points="100,12 94,26 100,22 106,26" fill="#fbbf24"/>
+                                <line x1="100" y1="100" x2="100" y2="22" stroke="#fbbf24" stroke-width="5" stroke-linecap="round"/>
+                                <polygon points="100,8 92,28 100,22 108,28" fill="#fbbf24"/>
                             </g>
                             <circle cx="100" cy="100" r="4" fill="#fbbf24"/>
                         </svg>
@@ -255,11 +270,17 @@
                     </div>
 
                     <!-- Row 2: Temperature | Present Weather -->
-                    <div class="asos-box">
+                    <div class="asos-box" id="temp-box"
+                         onmouseenter="showTempDewTooltip()" onmouseleave="hideTooltip()">
                         <div class="asos-label">TEMPERATURE</div>
                         <div class="asos-value">
                             <span id="t-val">--</span>
                             <span class="text-sm align-top text-gray-500">°F</span>
+                        </div>
+                        <div id="sfc-temp-row" style="display:none;margin-top:2px;">
+                            <span class="asos-label" style="font-size:0.6rem;">SFC TEMP</span>
+                            <span id="sfc-temp-val" style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;font-weight:700;color:#fbbf24;"></span>
+                            <span style="font-size:0.6rem;color:#71717a;">°F</span>
                         </div>
                         <i class="ph-fill ph-thermometer-hot absolute bottom-2 right-2 text-2xl opacity-10"></i>
                     </div>
@@ -273,7 +294,8 @@
                     </div>
 
                     <!-- Row 3: Dewpoint & RH | 1-Hour Precipitation -->
-                    <div class="asos-box">
+                    <div class="asos-box" id="dew-box"
+                         onmouseenter="showTempDewTooltip()" onmouseleave="hideTooltip()">
                         <div class="asos-label">DEWPOINT</div>
                         <div class="asos-value">
                             <span id="d-val">--</span>
@@ -485,6 +507,55 @@
         });
         function showTooltip(html) { if(tooltip) { tooltip.innerHTML = html; tooltip.classList.add('visible'); } }
         function hideTooltip() { if(tooltip) { tooltip.classList.remove('visible'); } }
+
+        // Temp/Dew spread tooltip with frost warning
+        window.showTempDewTooltip = function() {
+            if (!liveMetar) return;
+            const tF = liveMetar.temp != null ? Math.round(liveMetar.temp * 9/5 + 32) : null;
+            const dF = liveMetar.dewp != null ? Math.round(liveMetar.dewp * 9/5 + 32) : null;
+            if (tF == null || dF == null) return;
+            const spread = tF - dF;
+            const spreadColor = spread <= 5 ? '#facc15' : spread <= 10 ? '#a1a1aa' : '#52525b';
+            const frostWarn  = spread <= 5 ? '<div style="color:#facc15;font-weight:800;font-size:0.65rem;margin-top:4px;">⚠ FROST / FREEZING FOG POSSIBLE</div>' : '';
+            const html = `
+                <div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:6px;">TEMP / DEW ANALYSIS</div>
+                <div style="font-family:monospace;font-size:0.72rem;display:flex;flex-direction:column;gap:3px;">
+                    <div style="display:flex;justify-content:space-between;"><span style="color:#a1a1aa;">AIR TEMP</span><span style="font-weight:800;color:white;">${tF}°F</span></div>
+                    <div style="display:flex;justify-content:space-between;"><span style="color:#a1a1aa;">DEWPOINT</span><span style="font-weight:800;color:#60a5fa;">${dF}°F</span></div>
+                    <div style="display:flex;justify-content:space-between;border-top:1px solid #3f3f46;padding-top:3px;"><span style="color:#a1a1aa;">T/D SPREAD</span><span style="font-weight:800;color:${spreadColor};">${spread}°F</span></div>
+                    ${liveMetar.rh != null ? `<div style="display:flex;justify-content:space-between;"><span style="color:#a1a1aa;">REL HUMIDITY</span><span style="font-weight:800;color:white;">${liveMetar.rh}%</span></div>` : ''}
+                </div>
+                ${frostWarn}`;
+            showTooltip(html);
+        };
+
+        // Wind rose hover: all-runway crosswind components
+        window.showWindRoseTooltip = function() {
+            if (!liveMetar || (!liveMetar.wspd && !liveMetar.wgst)) return;
+            const wDir = liveMetar.wdir; const wSpd = liveMetar.wspd || 0; const wGst = liveMetar.wgst || 0;
+            if (wDir == null) return;
+            const spd = wGst > wSpd ? wGst : wSpd;
+            const RUNWAYS = [
+                {name:'16R/34L', hdg:160},
+                {name:'17L/35R', hdg:170},
+                {name:'7/25',    hdg:80},
+            ];
+            let rows = '';
+            RUNWAYS.forEach(rwy => {
+                const diff = ((wDir - rwy.hdg) + 360) % 360;
+                const xw = Math.round(Math.abs(spd * Math.sin(diff * Math.PI / 180)));
+                const hw = Math.round(spd * Math.cos(diff * Math.PI / 180));
+                const isTail = hw < 0;
+                const xCol = xw >= 35 ? '#ef4444' : xw >= 25 ? '#f97316' : xw >= 15 ? '#eab308' : '#22c55e';
+                rows += `<div style="display:flex;justify-content:space-between;align-items:center;font-family:monospace;font-size:0.68rem;margin-top:4px;">
+                    <span style="color:#a1a1aa;font-weight:700;min-width:70px;">RWY ${rwy.name}</span>
+                    <span style="color:${xCol};font-weight:800;min-width:60px;">XWIND ${xw}KT</span>
+                    <span style="color:#71717a;">${isTail?'TAILWIND':'HEADWIND'} ${Math.abs(hw)}KT</span>
+                </div>`;
+            });
+            const tip = `<div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;pb-1;margin-bottom:6px;padding-bottom:4px;">RUNWAY CROSSWINDS<span style="float:right;color:#71717a;font-weight:400;">${wDir}° @ ${wSpd}${wGst>wSpd?'G'+wGst:''}KT</span></div>${rows}`;
+            showTooltip(tip);
+        };
 
         window.showHourTooltip = function(offset) {
             const bi = Math.min(Math.floor(offset / 3), 15);
@@ -739,6 +810,19 @@
                                     if (age <= 10) wgst = gustObs.value;
                                 }
                             }
+                            // Surface temperature (pavement/road sensor if available)
+                            const sfcTempObs = obs.tsfc_temp_value_1 || obs.road_sensor_temp_value_1 || obs.pavement_temp_value_1;
+                            if (sfcTempObs?.value != null) {
+                                const sfcF = Math.round(sfcTempObs.value);
+                                window._sfcTempF = sfcF;
+                                const sfcEl = document.getElementById('sfc-temp-val');
+                                const sfcRow = document.getElementById('sfc-temp-row');
+                                if (sfcEl && sfcRow) {
+                                    sfcEl.textContent = sfcF;
+                                    sfcEl.style.color = sfcF <= 32 ? '#60a5fa' : sfcF <= 40 ? '#fbbf24' : '#a1a1aa';
+                                    sfcRow.style.display = 'block';
+                                }
+                            }
                             // 1-hour precip — only use if observation is within 2 hours
                             const precipObs = obs.precip_accum_one_hour_value_1;
                             if (precipObs?.value != null && precipObs?.date_time) {
@@ -839,16 +923,17 @@
             // Medium (CRJ-200, E175, turboprop): limit ~27 kt
             // Heavy  (B737, A320, B757, MD-10):  limit ~33 kt
             let label, color;
-            if (xw >= 33) {
-                label = `X-${xw}${gustFlag}KT HEAVY`;   color = '#ef4444'; // Red
-            } else if (xw >= 27) {
-                label = `X-${xw}${gustFlag}KT MEDIUM`;  color = '#f97316'; // Orange
+            // SOP limits (KRNO): ramp ops caution ≥25kt, suspend ≥35kt
+            if (xw >= 35) {
+                label = `XWIND ${xw}${gustFlag}KT`;  color = '#ef4444';
+            } else if (xw >= 25) {
+                label = `XWIND ${xw}${gustFlag}KT`;  color = '#f97316';
             } else if (xw >= 15) {
-                label = `X-${xw}${gustFlag}KT LIGHT`;   color = '#eab308'; // Yellow
+                label = `XWIND ${xw}${gustFlag}KT`;  color = '#eab308';
             } else if (xw > 0) {
-                label = `X-${xw}${gustFlag}KT`;         color = '#6b7280'; // Gray — no concern
+                label = `XWIND ${xw}${gustFlag}KT`;  color = '#71717a';
             } else {
-                label = 'HEADWIND';                      color = '#22c55e'; // Green
+                label = 'HEADWIND';                   color = '#22c55e';
             }
             return { xw, label, color };
         }
@@ -885,6 +970,20 @@
                 xwBadge.style.color = 'white';
             } else if (xwBadge) {
                 xwBadge.style.display = 'none';
+            }
+            // SOP alert: ramp ops caution ≥25kt gusts, suspend ≥35kt
+            const windObsBox = document.querySelector('.asos-box');
+            const SOP_SUSPEND_KT = 35;
+            if (windObsBox) {
+                if (wGst >= SOP_SUSPEND_KT) {
+                    windObsBox.classList.add('sop-alert');
+                    windObsBox.style.borderColor = '#f97316';
+                    windObsBox.title = `SOP ALERT: ${wGst}kt gust exceeds ramp ops limit (${SOP_SUSPEND_KT}kt)`;
+                } else {
+                    windObsBox.classList.remove('sop-alert');
+                    windObsBox.style.borderColor = '';
+                    windObsBox.title = '';
+                }
             }
 
             // Flight category
@@ -1094,6 +1193,21 @@
             if(titleEl) titleEl.textContent = alerts.length > 0 ? wwaTitle : "NO ACTIVE WATCHES, WARNINGS, OR ADVISORIES";
 
             wwaContainer.innerHTML = ''; wwaTimeline.innerHTML = ''; wwaBg.innerHTML = ''; wwaLines.innerHTML = ''; wwaAxis.innerHTML = '';
+            
+            // Empty state: hide timeline, show All Clear
+            const wwaTimelineRow = wwaContainer.closest('.panel')?.querySelector('.h-24');
+            if (alerts.length === 0) {
+                if (wwaTimelineRow) wwaTimelineRow.style.display = 'none';
+                wwaContainer.innerHTML = `
+                    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px;padding:20px 0;">
+                        <i class="ph-fill ph-check-circle" style="font-size:2.8rem;color:#22c55e;"></i>
+                        <div style="font-size:0.85rem;font-weight:800;color:#22c55e;letter-spacing:0.1em;text-transform:uppercase;">All Clear</div>
+                        <div style="font-size:0.65rem;color:#52525b;text-align:center;">No active watches, warnings, or advisories</div>
+                    </div>`;
+                return;
+            } else {
+                if (wwaTimelineRow) wwaTimelineRow.style.display = '';
+            }
 
             for(let i=0; i<TOTAL_HOURS; i++) {
                 const _hDate = new Date(now.getTime() + i*3600000);
@@ -1436,10 +1550,22 @@
                         }
 
                         const card = document.createElement('div');
-                        card.className = 'ops-card flex flex-col justify-between p-3';
-                        card.style.borderTop = `4px solid ${borderColor}`;
+                        const cardActive = h.prob > 0;
+                        card.className = 'ops-card flex flex-col justify-between p-3' + (cardActive ? ' ops-card-active' : ' ops-card-inactive');
+                        // Active: full colored border + subtle tinted background
+                        if (cardActive) {
+                            card.style.border = `2px solid ${borderColor}`;
+                            card.style.backgroundColor = borderColor + '14'; // ~8% opacity tint
+                        } else {
+                            card.style.border = '1px solid #27272a';
+                        }
                         card.innerHTML = `
-                            <div class="flex justify-between items-start z-10"><div class="hazard-val" style="color:${valColor}">${displayVal}<span class="percent-sign">%</span></div></div>
+                            <div class="flex justify-between items-start z-10">
+                                <div style="display:flex;align-items:flex-end;gap:3px;">
+                                    <div class="hazard-val" style="color:${valColor}">${displayVal}<span class="percent-sign">%</span></div>
+                                    <span class="prob-label">PROB</span>
+                                </div>
+                            </div>
                             <div class="z-10 mt-1">
                                 <div class="hazard-label">${h.name}</div>
                                 <div class="hazard-criteria">${displayMetric}</div>
@@ -1500,10 +1626,13 @@
                         let topLabel = bi === 0 ? 'Now' : `+${hoursOut}h`;
                         let timeLabel = getHourLabel(globalNow, hoursOut);
                         let alignClass = bi===0 ? '' : (bi===16 ? 'transform -translate-x-full' : 'transform -translate-x-1/2');
+                        const [localPart, zuluPart] = timeLabel.includes('/') ? timeLabel.split('/') : [timeLabel, ''];
                         axisCtx.innerHTML += `
                             <div class="absolute top-0 ${alignClass} text-center" style="left: ${leftPos}%">
-                                <div class="font-bold text-slate-400">${topLabel}</div>
-                                <div class="text-[10px] text-slate-500 font-mono mt-0.5 leading-none font-bold">${timeLabel}</div>
+                                <div class="font-bold text-slate-300" style="font-size:0.7rem;">${topLabel}</div>
+                                <div class="font-mono mt-0.5 leading-none" style="font-size:0.62rem;">
+                                    <span style="color:#cbd5e1;font-weight:800;">${localPart}</span>${zuluPart ? `<span style="color:#52525b;font-weight:600;">/${zuluPart}</span>` : ''}
+                                </div>
                             </div>`;
                     }
 
@@ -1520,12 +1649,13 @@
                         Temperature:'TEMPERATURE'
                     })[id] || id.toUpperCase().replace('FLASHFREEZE','FLASH_FREEZE');
 
-                    HAZARD_DETAILS.forEach(h => {
+                    HAZARD_DETAILS.forEach((h, hIdx) => {
                         const axisLabel = h.timelineName || h.name;
                         labelsCtx.innerHTML += `<div class="h-full flex items-center justify-end text-xs font-bold text-slate-400 pr-2 uppercase tracking-wider">${axisLabel}</div>`;
 
                         const refKey = HZ_KEY(h.id);
-                        let rowHtml = `<div class="timeline-row"><div class="horizontal-guide"></div><div class="bar-container">`;
+                        const rowStripe = hIdx % 2 === 0 ? 'timeline-row-even' : 'timeline-row-odd';
+                        let rowHtml = `<div class="timeline-row ${rowStripe}"><div class="horizontal-guide"></div><div class="bar-container">`;
 
                         for (let bi = 0; bi < N_BLOCKS; bi++) {
                             const left  = bi * BLOCK_W;
