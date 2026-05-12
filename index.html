@@ -210,9 +210,8 @@
             <div class="flex-grow flex gap-3 min-h-0">
 
                 <!-- LEFT: Big Wind Graphic -->
-                <div class="asos-box flex flex-col items-center justify-between" id="wind-obs-box" style="width:48%; padding:10px;">
-                    <div class="asos-label w-full" style="cursor:crosshair;"
-                         onmouseenter="showWindForecast()" onmouseleave="hideTooltip()">WIND</div>
+                <div class="asos-box flex flex-col items-center justify-between" id="wind-obs-box" style="width:48%; padding:10px;cursor:crosshair;" onmouseenter="showWindForecast()" onmouseleave="hideTooltip()">
+                    <div class="asos-label w-full">WIND</div>
 
                     <!-- Flight cat + xwind badges -->
                     <div class="flex gap-2 mt-1 w-full justify-end">
@@ -222,7 +221,7 @@
 
                     <!-- Large wind rose -->
                     <div style="flex:1; width:100%; display:flex; align-items:center; justify-content:center; min-height:0; padding:4px 0;">
-                        <svg viewBox="0 0 200 200" style="width:100%;height:100%;max-height:200px;cursor:crosshair;" preserveAspectRatio="xMidYMid meet">
+                        <svg viewBox="0 0 200 200" style="width:100%;height:100%;max-height:200px;pointer-events:none;" preserveAspectRatio="xMidYMid meet">
                             <!-- Range rings -->
                             <circle cx="100" cy="100" r="90" fill="none" stroke="#3f3f46" stroke-width="1"/>
                             <circle cx="100" cy="100" r="60" fill="none" stroke="#3f3f46" stroke-width="0.5" stroke-dasharray="3,3"/>
@@ -265,9 +264,8 @@
                         </svg>
                     </div>
 
-                    <!-- Speed / Gust / Direction — hover here for wind forecast -->
-                    <div class="w-full text-center" style="margin-top:4px;cursor:crosshair;padding:6px 0 2px;"
-                         onmouseenter="showWindForecast()" onmouseleave="hideTooltip()">
+                    <!-- Speed / Gust / Direction -->
+                    <div class="w-full text-center" style="margin-top:4px;">
                         <div style="font-family:'JetBrains Mono',monospace; font-size:2.6rem; font-weight:800; color:white; line-height:1; display:flex; align-items:baseline; justify-content:center; gap:5px;">
                             <span id="w-spd">--</span>
                             <span style="font-size:0.9rem; color:#71717a; font-weight:400;">G</span>
@@ -826,9 +824,10 @@
             showTooltip(tip);
         };
 
-        window.showHourTooltip = function(offset) {
-            // offset = hours from now (0-47); block index derived from it
-            const bi    = Math.min(Math.max(Math.floor(offset / 3), 0), 15);
+        window.showHourTooltip = function(offset, actualBi) {
+            // offset = hours from now for time display
+            // actualBi = exact block index (passed from block hover, avoids cycle-offset error)
+            const bi    = (actualBi !== undefined) ? actualBi : Math.min(Math.max(Math.floor(offset / 3), 0), 15);
             const block = nbmBlocks?.[bi];
             const bhaz  = nbmBlockHazards?.[bi];
 
@@ -2029,7 +2028,7 @@
                             // Compute hours-from-now for this block so tooltip gets correct time
                             const _hrOff = Math.round((cycleMs + sFxx*3600000 - globalNow.getTime()) / 3600000);
                             const _hrClamp = Math.max(0, Math.min(47, _hrOff));
-                            rowHtml += `<div class="timeline-block" title="${tip}" style="left:${leftPct}%;width:${widthPct}%;background:${bg};display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(0,0,0,0.18);position:absolute;cursor:help;" onmouseenter="showHourTooltip(${_hrClamp})" onmouseleave="hideTooltip()">${txt}</div>`;
+                            rowHtml += `<div class="timeline-block" title="${tip}" style="left:${leftPct}%;width:${widthPct}%;background:${bg};display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(0,0,0,0.18);position:absolute;cursor:help;" onmouseenter="showHourTooltip(${_hrClamp},${bi})" onmouseleave="hideTooltip()">${txt}</div>`;
                         }
 
                         rowHtml += `</div></div>`;
