@@ -487,13 +487,94 @@
         function hideTooltip() { if(tooltip) { tooltip.classList.remove('visible'); } }
 
         window.showHourTooltip = function(offset) {
-            const d = new Date(globalNow.getTime() + offset * 3600000);
-            d.setMinutes(0); d.setSeconds(0); 
-            const local = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
-            const zHour = d.getUTCHours().toString().padStart(2, '0');
-            const zMin = d.getUTCMinutes().toString().padStart(2, '0');
-            const html = `<div class="font-bold text-xs border-b border-gray-600 mb-1 pb-1 text-center">TIME INSPECTION (+${offset}h)</div><div class="text-sm font-mono text-center text-white">${local}</div><div class="text-xs text-gray-400 font-mono text-center mt-0.5">${zHour}:${zMin}Z</div>`;
-            showTooltip(html);
+            const bi = Math.min(Math.floor(offset / 3), 15);
+            const block = nbmBlocks?.[bi];
+            const bhaz  = nbmBlockHazards?.[bi];
+
+            // Time window label
+            const d1 = new Date(globalNow.getTime() + offset * 3600000);
+            const d2 = new Date(globalNow.getTime() + (Math.min(offset+3, 48)) * 3600000);
+            const fmt = d => {
+                let h = d.getHours(); const ap = h >= 12 ? 'P' : 'A';
+                h = h % 12 || 12;
+                const dy = d.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
+                return `${dy} ${h}${ap}`;
+            };
+            const zHour = d1.getUTCHours().toString().padStart(2, '0');
+
+            // Overall block risk for header color
+            const blockRisks = bhaz ? Object.values(bhaz).map(v => v?.risk || 0) : [0];
+            const maxRisk = Math.max(...blockRisks);
+            const headerColor = RISK_LEVELS[maxRisk]?.color || '#3f3f46';
+            const headerText  = RISK_LEVELS[maxRisk]?.name?.toUpperCase() || 'NO DATA';
+
+            let rows = '';
+
+            HAZARD_DETAILS.forEach(h => {
+                const key   = HZ_KEY_MAP[h.id] || h.id.toUpperCase();
+                const hdata = bhaz?.[key];
+                const risk  = hdata?.risk  ?? 0;
+                const prob  = hdata?.prob  ?? 0;
+                const level = hdata?.level ?? 0;
+                if (prob === 0 && risk === 0) return; // skip zero hazards
+
+                const cfg    = RISK_LEVELS[risk];
+                const bgCol  = cfg.color + '22';
+                const txtCol = risk > 0 ? cfg.color : '#71717a';
+
+                // Met value — show P90 from block data
+                let metLine = '';
+                if (key === 'WIND' && block?.GST) {
+                    const p90g = block.GST_P90 ?? block.GST;
+                    const gCol = deciColormap('WIND', p90g);
+                    metLine = `<span style="color:${gCol || '#fff'};font-weight:800;">${Math.round(block.GST)} mph gust</span>` +
+                              `<span style="color:#71717a"> · P90: <span style="color:${deciColormap('WIND', p90g) || '#fff'}">${Math.round(p90g)} mph</span></span>`;
+                } else if (key === 'TEMPERATURE' && block?.TMP != null) {
+                    const tP90h = block.TMP_P90 ?? block.TMP;
+                    const tP10 = block.TMP_P10 ?? block.TMP;
+                    const tCol = deciColormap('COLD', block.TMP);
+                    metLine = `<span style="color:${tCol || '#fff'};font-weight:800;">${Math.round(block.TMP)}°F</span>` +
+                              `<span style="color:#71717a"> · P90: ${Math.round(tP90h)}°F / P10: ${Math.round(tP10)}°F</span>`;
+                } else if (key === 'VISIBILITY' && block?.VIS != null) {
+                    const visSM = block.VIS / 10;
+                    const vCol = deciColormap('VISIBILITY', visSM);
+                    metLine = `<span style="color:${vCol || '#fff'};font-weight:800;">${visSM >= 10 ? '10+ SM' : visSM + ' SM'}</span>`;
+                } else if (key === 'LIGHTNING') {
+                    metLine = `<span style="color:${txtCol};font-weight:800;">${Math.round(prob)}% thunder prob</span>`;
+                } else if (key === 'SNOW' && block?.S06 != null && block.S06 > 0) {
+                    const rate = ((block.S06 / 10) / 6).toFixed(2);
+                    const sCol = deciColormap('SNOW', parseFloat(rate));
+                    metLine = `<span style="color:${sCol || '#fff'};font-weight:800;">${rate} in/hr</span>`;
+                } else if (key === 'RAIN' && block?.Q01 != null && block.Q01 > 0) {
+                    const rate = (block.Q01 / 100).toFixed(2);
+                    const rCol = deciColormap('RAIN', parseFloat(rate));
+                    metLine = `<span style="color:${rCol || '#fff'};font-weight:800;">${rate} in/hr</span>`;
+                } else if (key === 'FZRA' && block?.ZR6 != null && block.ZR6 > 0) {
+                    metLine = `<span style="color:#60a5fa;font-weight:800;">${(block.ZR6/100).toFixed(3)}" / 6hr</span>`;
+                } else if (key === 'FLASH_FREEZE' && block?.TMP != null && block?.DPT != null) {
+                    const tw = block.TMP - (block.TMP - block.DPT) / 3;
+                    const ffCol = deciColormap('FLASH_FREEZE', tw);
+                    metLine = `<span style="color:${ffCol || '#fff'};font-weight:800;">Tw ${Math.round(tw)}°F</span>`;
+                }
+
+                rows += `<div style="margin-bottom:5px; padding:4px 6px; border-radius:3px; background:${bgCol}; border-left:3px solid ${cfg.color};">
+                    <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                        <span style="font-weight:800; font-size:0.7rem; color:#e4e4e7; text-transform:uppercase;">${h.name}</span>
+                        <span style="font-size:0.65rem; font-weight:800; color:${txtCol};">${cfg.name.toUpperCase()}</span>
+                    </div>
+                    ${metLine ? `<div style="font-size:0.65rem; font-family:monospace; margin-top:2px;">${metLine}</div>` : ''}
+                    ${risk > 0 && h.prep ? `<div style="font-size:0.6rem; color:#a1a1aa; margin-top:2px;">→ ${h.prep}</div>` : ''}
+                </div>`;
+            });
+
+            const noData = !rows ? '<div style="color:#71717a; font-size:0.7rem; text-align:center; padding:8px;">No active hazards this period</div>' : '';
+
+            const tipHtml = `
+                <div style="font-size:0.7rem; font-weight:800; text-transform:uppercase; color:${headerColor}; border-bottom:1px solid #3f3f46; padding-bottom:4px; margin-bottom:6px;">
+                    ${fmt(d1)} – ${fmt(d2)}<span style="color:#52525b; font-weight:400; float:right;">${zHour}Z +${offset}h</span>
+                </div>
+                ${rows}${noData}`;
+            showTooltip(tipHtml);
         };
 
         function getHazardTimeString(h_id, refsTimeline) {
@@ -555,7 +636,9 @@
         // --- DATA STATE ---
         let liveMetar = null;
         let liveAlerts = [];
-        let cycleStartTime = null; // UTC ms of model cycle start
+        let cycleStartTime = null;
+        let nbmBlocks = null;         // timeline.json blocks (module scope for tooltip)
+        let nbmBlockHazards = null;   // timeline.json block_hazards
 
         function setStatus(msg, color) {
             const el = document.getElementById('fetch-status');
@@ -1223,6 +1306,14 @@
             RAIN:'in/hr', TEMPERATURE:'°F',
         };
 
+                // Hazard ID → backend JSON key (used in tooltip and timeline)
+        const HZ_KEY_MAP = {
+            Wind:'WIND', Lightning:'LIGHTNING', Snow:'SNOW',
+            Visibility:'VISIBILITY', Fzra:'FZRA',
+            FlashFreeze:'FLASH_FREEZE', Rain:'RAIN',
+            Temperature:'TEMPERATURE'
+        };
+
         async function initDashboard() {
             try {
                 await loadConfig();
@@ -1253,9 +1344,7 @@
                     if (cm) cycleStartTime = Date.UTC(+cm[1], +cm[2]-1, +cm[3], +cm[4], 0, 0);
                 }
 
-                // NBM blocks from timeline.json
-                let nbmBlocks = null;
-                let nbmBlockHazards = null;
+                // NBM blocks from timeline.json (assigned to module-scope vars)
                 if (timelineResp.status === 'fulfilled' && timelineResp.value.blocks) {
                     nbmBlocks       = timelineResp.value.blocks;
                     nbmBlockHazards = timelineResp.value.block_hazards;
@@ -1291,9 +1380,24 @@
                         return { ...h, prob, risk }; 
                     });
 
+                    // Sort: active threats by risk DESC, then prob DESC.
+                    // Zero-risk cards sorted by seasonal relevance (least relevant last).
+                    const mo = new Date().getMonth() + 1; // 1=Jan ... 12=Dec
+                    const SEASONAL = { // 1=low relevance, 10=high — KRNO high desert
+                        WIND:        mo >= 3  && mo <= 6  ? 9 : 7,  // spring/early summer windiest
+                        LIGHTNING:   mo >= 5  && mo <= 9  ? 9 : 2,  // May-Sep convective season
+                        SNOW:        (mo <= 3 || mo >= 11) ? 9 : mo === 4 || mo === 10 ? 5 : 1,
+                        VISIBILITY:  5,                               // dust/fog year-round
+                        FZRA:        (mo <= 3 || mo >= 11) ? 8 : mo === 4 || mo === 10 ? 4 : 1,
+                        FLASH_FREEZE:(mo >= 10 || mo <= 4) ? 7 : 1,
+                        RAIN:        mo >= 4  && mo <= 10 ? 6 : 4,
+                        TEMPERATURE: mo >= 5  && mo <= 9  ? 8 : 2,
+                    };
+                    const seasonKey = h => HZ_KEY_MAP[h.id] || h.id.toUpperCase().replace('FLASHFREEZE','FLASH_FREEZE');
                     hazards.sort((a, b) => {
-                        if (b.risk !== a.risk) return b.risk - a.risk; 
-                        return b.prob - a.prob; 
+                        if (b.risk !== a.risk) return b.risk - a.risk;
+                        if (b.risk > 0) return b.prob - a.prob;  // both active: by prob
+                        return (SEASONAL[seasonKey(b)] || 5) - (SEASONAL[seasonKey(a)] || 5); // inactive: by season
                     });
 
                     hazards.forEach(h => {
@@ -1367,7 +1471,7 @@
                                 <span class="text-[10px] font-bold px-1.5 py-0.5 rounded" style="background-color: ${config.color}; color: ${config.textColor}">STATUS: ${config.name.toUpperCase()} THREAT</span>
                             </div>
                             <div class="text-[10px] italic text-gray-400 bg-gray-800 p-1 rounded mb-1">Threshold: ${displayMetric}</div>
-                            ${h.risk >= 1 ? `<div class="mt-1 text-[10px] text-gray-300 border-t border-gray-700 pt-1"><span class="font-bold text-gray-500 uppercase">Action:</span> ${h.prep}</div>` : ''}
+                            ${h.prob > 0 && h.prep ? `<div class="mt-1 text-[10px] text-gray-300 border-t border-gray-700 pt-1"><span class="font-bold text-gray-500 uppercase">Action:</span> ${h.prep}</div>` : ''}
                         `;
                         card.addEventListener('mouseenter', () => showTooltip(tHtml));
                         card.addEventListener('mouseleave', hideTooltip);
