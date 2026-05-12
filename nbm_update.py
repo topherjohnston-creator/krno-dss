@@ -61,7 +61,7 @@ METRICS = {
     "RAIN":        {2:">0.10 in/hr",  3:">0.25 in/hr",  4:">0.50 in/hr", 5:">1.0 in/hr"},
     "FZRA":        {2:"Trace",        3:"Trace-0.01in", 4:"0.01-0.10in", 5:">0.10in"},
     "FLASH_FREEZE":{2:"Wet+Tw<36F",   3:"Wet+Tw<32F",   4:"Wet+Tw<28F",  5:"Wet+Tw<25F"},
-    "HEAT":        {2:"90-95F",       3:"95-100F",      4:"100-105F",    5:">105F"},
+    "HEAT":        {1:"85-90F",  2:"90-95F",       3:"95-100F",      4:"100-105F",    5:">105F"},
     "COLD":        {2:"32-40F",       3:"20-32F",       4:"0-20F",       5:"<0F"},
 }
 
@@ -405,10 +405,12 @@ def compute_block(block, bi, nbp):
     # a 65F midnight block correctly shows nothing.
     hp, hl = 0.0, 0
     if tmp is not None:
-        for t, l in [(90,2),(95,3),(100,4),(105,5)]:
+        # Scan lowest→highest threshold; update to the highest qualifying level.
+        # Level 1 (85°F) gives timeline awareness for warm-but-sub-hazard conditions,
+        # matching operational density-altitude concerns at KRNO (4,415 ft elevation).
+        for t, l in [(85,1),(90,2),(95,3),(100,4),(105,5)]:
             p = gauss_above(tmp, tsd, t)
-            if p >= 5.0: hp, hl = p, l
-            else: break
+            if p >= 5.0: hp, hl = p, l   # keep updating — finds highest qualifying
     h["HEAT"] = {"prob": hp, "risk": risk_matrix(hp, hl), "level": hl,
                  "color": RISK_C[risk_matrix(hp, hl)]}
 
