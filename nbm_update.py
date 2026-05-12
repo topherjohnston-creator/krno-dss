@@ -270,9 +270,12 @@ def make_blocks(nbh, nbs):
         b = {
             'start_fxx': s, 'end_fxx': e, 'utc_start': utc_start,
             'TMP': av('TMP'), 'TSD': av('TSD'), 'DPT': av('DPT'),
-            'WDR': mx('WDR'), 'WSP': mx('WSP'),  # wind dir (tens of deg) & speed (mph)
+            'WDR': mx('WDR'),
+            # WSP/GST/GSD from NBH/NBS are in KNOTS — convert to mph for all downstream use
+            'WSP': round(mx('WSP') * KT_TO_MPH, 1),
+            'GST': round(mx('GST') * KT_TO_MPH, 1),
+            'GSD': round(av('GSD') * KT_TO_MPH, 1),
             'SKY': av('SKY'),  # cloud coverage %
-            'GST': mx('GST'), 'GSD': av('GSD'),
             'T01': mx('T01') if nbh_hrs else _nbs('T06'),
             'P01': mx('P01') if nbh_hrs else nbs_p01,
             'Q01': mx('Q01') if nbh_hrs else nbs_q01,
@@ -521,10 +524,13 @@ def main():
     nbh_hourly = []
     for fxx in range(1, 26):
         h = nbh.get(fxx, {})
+        # WSP/GST/GSD from NBH are in KNOTS — convert to mph for frontend display
+        def _kt(v): return round(v * KT_TO_MPH, 1) if v else 0
         nbh_hourly.append({
             'fxx': fxx, 'utc': h.get('utc_hour'),
             'TMP': h.get('TMP'), 'DPT': h.get('DPT'),
-            'WDR': h.get('WDR'), 'WSP': h.get('WSP'), 'GST': h.get('GST'),
+            'WDR': h.get('WDR'),
+            'WSP': _kt(h.get('WSP')), 'GST': _kt(h.get('GST')), 'GSD': _kt(h.get('GSD')),
             'VIS': h.get('VIS'), 'SKY': h.get('SKY'),
             'P01': h.get('P01'), 'Q01': h.get('Q01'), 'T01': h.get('T01'),
             'MVV': h.get('MVV'), 'IFV': h.get('IFV'),
@@ -570,6 +576,9 @@ def main():
                 "prob": round(wp, 1), "risk": rk, "risk_label": RISK_L[rk],
                 "color": RISK_C[rk], "level": wl,
                 "metric": METRICS.get("WIND", {}).get(wl, ""),
+                # G24 percentiles already in mph (converted from kt in parse_nbp)
+                "g24_p50_mph": round(gm, 1) if gm else None,
+                "g24_p90_mph": round(p90, 1) if p90 else None,
             })
             if pb:
                 threats['WIND'].update({
