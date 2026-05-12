@@ -1339,9 +1339,10 @@
                 if (threatsResp.status === 'fulfilled' && threatsResp.value.threats) {
                     refsThreats = threatsResp.value.threats;
                     document.getElementById('refs-status')?.remove();
-                    const cycleStr = threatsResp.value.cycle || '';
-                    const cm = cycleStr.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2})Z/);
-                    if (cm) cycleStartTime = Date.UTC(+cm[1], +cm[2]-1, +cm[3], +cm[4], 0, 0);
+                    // cycle_utc_iso is "YYYY-MM-DDTHH:00:00Z" — parse as UTC cycle start
+                    // peak_start_fxx values in threats.json are offsets from this time
+                    const iso = threatsResp.value.cycle_utc_iso;
+                    if (iso) cycleStartTime = new Date(iso).getTime();
                 }
 
                 // NBM blocks from timeline.json (assigned to module-scope vars)
@@ -1380,25 +1381,8 @@
                         return { ...h, prob, risk }; 
                     });
 
-                    // Sort: active threats by risk DESC, then prob DESC.
-                    // Zero-risk cards sorted by seasonal relevance (least relevant last).
-                    const mo = new Date().getMonth() + 1; // 1=Jan ... 12=Dec
-                    const SEASONAL = { // 1=low relevance, 10=high — KRNO high desert
-                        WIND:        mo >= 3  && mo <= 6  ? 9 : 7,  // spring/early summer windiest
-                        LIGHTNING:   mo >= 5  && mo <= 9  ? 9 : 2,  // May-Sep convective season
-                        SNOW:        (mo <= 3 || mo >= 11) ? 9 : mo === 4 || mo === 10 ? 5 : 1,
-                        VISIBILITY:  5,                               // dust/fog year-round
-                        FZRA:        (mo <= 3 || mo >= 11) ? 8 : mo === 4 || mo === 10 ? 4 : 1,
-                        FLASH_FREEZE:(mo >= 10 || mo <= 4) ? 7 : 1,
-                        RAIN:        mo >= 4  && mo <= 10 ? 6 : 4,
-                        TEMPERATURE: mo >= 5  && mo <= 9  ? 8 : 2,
-                    };
-                    const seasonKey = h => HZ_KEY_MAP[h.id] || h.id.toUpperCase().replace('FLASHFREEZE','FLASH_FREEZE');
-                    hazards.sort((a, b) => {
-                        if (b.risk !== a.risk) return b.risk - a.risk;
-                        if (b.risk > 0) return b.prob - a.prob;  // both active: by prob
-                        return (SEASONAL[seasonKey(b)] || 5) - (SEASONAL[seasonKey(a)] || 5); // inactive: by season
-                    });
+                    // Sort purely by probability descending
+                    hazards.sort((a, b) => b.prob - a.prob);
 
                     hazards.forEach(h => {
                         const isGrey = h.risk === 0;
@@ -1407,7 +1391,7 @@
                         
                         const borderColor = config.color;
                         const valColor = isGrey ? '#52525b' : '#ffffff'; 
-                        const displayVal = `${Math.round((h.prob || 0) / 5) * 5}`;
+                        const displayVal = h.prob > 0 ? Math.round(h.prob) : 0;
                         
                         const refKey = hazardMapping[h.id] || h.id.toUpperCase();
                         
@@ -1434,8 +1418,10 @@
                         let timeString = '';
                         const thr = refsThreats?.[refKey];
                         if (thr && thr.peak_start_fxx && thr.prob > 0) {
-                            const d1 = new Date(globalNow.getTime() + thr.peak_start_fxx * 3600000);
-                            const d2 = new Date(globalNow.getTime() + thr.peak_end_fxx   * 3600000);
+                            // peak_fxx is offset from cycle start, not from now
+                            const baseMs = cycleStartTime || globalNow.getTime();
+                            const d1 = new Date(baseMs + thr.peak_start_fxx * 3600000);
+                            const d2 = new Date(baseMs + thr.peak_end_fxx   * 3600000);
                             const nowMs = globalNow.getTime();
                             if (d2.getTime() > nowMs) {
                                 const fmt = d => {
