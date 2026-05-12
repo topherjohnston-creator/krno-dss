@@ -1,0 +1,36 @@
+name: Update NBM Hazard Data
+
+on:
+  schedule:
+    - cron: '0 * * * *'   # Every hour on the hour
+  workflow_dispatch:        # Manual trigger from GitHub Actions tab
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # Needed to commit threats.json / timeline.json
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests scipy numpy
+
+      - name: Run NBM processor
+        run: python nbm_update.py
+
+      - name: Commit updated JSON files
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add threats.json timeline.json
+          # Only commit if something changed
+          git diff --staged --quiet || git commit -m "Auto-update NBM hazard data $(date -u '+%Y-%m-%d %H:%MZ')"
+          git push
