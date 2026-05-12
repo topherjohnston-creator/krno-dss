@@ -705,63 +705,60 @@
 
         // Wind-specific sparkline (speed + gust dual bar)
         window.showWindForecast = function() {
-            // G24 24-hr max gust from threats.json (mph, converted from kt in backend)
-            const g24p50 = refsThreats?.WIND?.g24_p50_mph;
-            const g24p90 = refsThreats?.WIND?.g24_p90_mph;
+            var out = [];
+            out.push('<div style="font-weight:800;font-size:0.7rem;letter-spacing:0.04em;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:6px;">Wind Forecast</div>');
 
-            // P90 timing: hour where GST + 1.28×GSD is maximum
-            let peakTimeStr = '';
+            // G24 24-hr max gust (mph, from threats.json)
+            var g24p50 = (refsThreats && refsThreats.WIND) ? refsThreats.WIND.g24_p50_mph : null;
+            var g24p90 = (refsThreats && refsThreats.WIND) ? refsThreats.WIND.g24_p90_mph : null;
+
+            if (g24p50 != null && g24p50 > 0) {
+                var c50 = deciColormap('WIND', g24p50) || '#fbbf24';
+                var c90 = deciColormap('WIND', g24p90 || g24p50) || '#f97316';
+                out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:2px;"><span style="color:#a1a1aa;">24-hr Max Gust (P50)</span><span style="color:' + c50 + ';font-weight:800;">' + Math.round(g24p50) + ' mph</span></div>');
+                out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:4px;"><span style="color:#a1a1aa;">24-hr Max Gust (P90)</span><span style="color:' + c90 + ';font-weight:800;">' + Math.round(g24p90 || g24p50) + ' mph</span></div>');
+
+                // Peak P90 timing from nbhHourly
+                if (nbhHourly && nbhHourly.length > 0) {
+                    var best = -1, bestIdx = 0;
+                    for (var i = 0; i < nbhHourly.length; i++) {
+                        var v = (nbhHourly[i].GST || 0) + 1.28 * (nbhHourly[i].GSD || 0);
+                        if (v > best) { best = v; bestIdx = i; }
+                    }
+                    var baseMs = cycleStartTime || Date.now();
+                    var pd = new Date(baseMs + ((nbhHourly[bestIdx].fxx || bestIdx + 1) * 3600000));
+                    var hh = pd.getHours(); var ap = hh >= 12 ? 'P' : 'A';
+                    var dy = pd.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
+                    var peakStr = dy + ' ' + (hh % 12 || 12) + ap;
+                    out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;padding-bottom:5px;margin-bottom:5px;border-bottom:1px solid #27272a;"><span style="color:#a1a1aa;">Peak P90 timing</span><span style="color:#fbbf24;font-weight:800;">' + peakStr + '</span></div>');
+                }
+            } else {
+                out.push('<div style="color:#71717a;font-size:0.65rem;font-family:monospace;margin-bottom:6px;">G24 loading — next refresh in ~15 min</div>');
+            }
+
+            // Sparkline
             if (nbhHourly && nbhHourly.length > 0) {
-                const p90Vals = nbhHourly.map(h => (h.GST || 0) + 1.28 * (h.GSD || 0));
-                const peakIdx = p90Vals.indexOf(Math.max(...p90Vals));
-                if (peakIdx >= 0) {
-                    const baseMs = cycleStartTime || Date.now();
-                    const pd = new Date(baseMs + (nbhHourly[peakIdx].fxx || peakIdx + 1) * 3600000);
-                    const hh = pd.getHours(); const ap = hh >= 12 ? 'P' : 'A';
-                    const dy = pd.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
-                    peakTimeStr = `${dy} ${hh % 12 || 12}${ap}`;
+                out.push(makeDualSparkline('WSP', 'GST', '#93c5fd', '#fbbf24', 80));
+            } else {
+                out.push('<div style="color:#52525b;font-size:0.65rem;text-align:center;padding:8px;">Hourly forecast loading...</div>');
+            }
+
+            // Current runway crosswinds (from live METAR)
+            if (liveMetar && liveMetar.wdir != null && (liveMetar.wspd || liveMetar.wgst)) {
+                var wDir = liveMetar.wdir;
+                var spd  = (liveMetar.wgst > liveMetar.wspd) ? liveMetar.wgst : (liveMetar.wspd || 0);
+                var RWYS = [{name:'16R/34L',hdg:160},{name:'17L/35R',hdg:170},{name:'7/25',hdg:80}];
+                out.push('<div style="font-size:0.6rem;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:0.06em;margin-top:6px;margin-bottom:3px;border-top:1px solid #27272a;padding-top:5px;">Current Runway Crosswinds</div>');
+                for (var r = 0; r < RWYS.length; r++) {
+                    var diff = ((wDir - RWYS[r].hdg) + 360) % 360;
+                    var xw = Math.round(Math.abs(spd * Math.sin(diff * Math.PI / 180)));
+                    var hw = Math.round(spd * Math.cos(diff * Math.PI / 180));
+                    var xc = xw >= 35 ? '#ef4444' : xw >= 25 ? '#f97316' : xw >= 15 ? '#eab308' : '#22c55e';
+                    out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.65rem;margin-bottom:2px;"><span style="color:#a1a1aa;">RWY ' + RWYS[r].name + '</span><span style="color:' + xc + ';font-weight:800;">XWIND ' + xw + 'KT</span><span style="color:#52525b;">' + (hw < 0 ? 'TAIL' : 'HEAD') + ' ' + Math.abs(hw) + 'KT</span></div>');
                 }
             }
 
-            const g24Line = (g24p50 != null) ? `
-                <div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:2px;">
-                    <span style="color:#a1a1aa;">24-hr Max Gust (P50)</span>
-                    <span style="color:${deciColormap('WIND', g24p50)||'#fbbf24'};font-weight:800;">${Math.round(g24p50)} mph</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:2px;">
-                    <span style="color:#a1a1aa;">24-hr Max Gust (P90)</span>
-                    <span style="color:${deciColormap('WIND', g24p90||g24p50)||'#f97316'};font-weight:800;">${Math.round(g24p90||g24p50)} mph</span>
-                </div>
-                ${peakTimeStr ? `<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;padding-bottom:5px;margin-bottom:5px;border-bottom:1px solid #27272a;">
-                    <span style="color:#a1a1aa;">Peak P90 timing</span>
-                    <span style="color:#fbbf24;font-weight:800;">${peakTimeStr}</span>
-                </div>` : ''}` : '<div style="color:#71717a;font-size:0.65rem;font-family:monospace;margin-bottom:6px;">G24 loading — next refresh in ~15 min</div>';
-
-            // Runway crosswinds from current METAR (merged into this tooltip)
-            let xwindRows = '';
-            if (liveMetar && liveMetar.wspd != null && liveMetar.wdir != null) {
-                const wDir = liveMetar.wdir; const wSpd = liveMetar.wspd || 0; const wGst = liveMetar.wgst || 0;
-                const spd = wGst > wSpd ? wGst : wSpd;
-                const RWYS = [{name:'16R/34L',hdg:160},{name:'17L/35R',hdg:170},{name:'7/25',hdg:80}];
-                xwindRows = '<div style="font-size:0.6rem;font-weight:800;color:#71717a;text-transform:uppercase;letter-spacing:0.06em;margin-top:6px;margin-bottom:3px;border-top:1px solid #27272a;padding-top:5px;">Current Runway Crosswinds</div>';
-                RWYS.forEach(rwy => {
-                    const diff = ((wDir - rwy.hdg) + 360) % 360;
-                    const xw  = Math.round(Math.abs(spd * Math.sin(diff * Math.PI / 180)));
-                    const hw  = Math.round(spd * Math.cos(diff * Math.PI / 180));
-                    const xCol = xw >= 35 ? '#ef4444' : xw >= 25 ? '#f97316' : xw >= 15 ? '#eab308' : '#22c55e';
-                    xwindRows += `<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.65rem;margin-bottom:2px;">
-                        <span style="color:#a1a1aa;">RWY ${rwy.name}</span>
-                        <span style="color:${xCol};font-weight:800;">XWIND ${xw}KT</span>
-                        <span style="color:#52525b;">${hw < 0 ? 'TAILWIND' : 'HEADWIND'} ${Math.abs(hw)}KT</span>
-                    </div>`;
-                });
-            }
-
-            const spark = (nbhHourly && nbhHourly.length > 0)
-                ? makeDualSparkline('WSP', 'GST', '#93c5fd', '#fbbf24', 80)
-                : '<div style="color:#52525b;font-size:0.65rem;text-align:center;padding:8px;">Hourly forecast loading...</div>';
-
-            showTooltip(`<div style="font-weight:800;font-size:0.7rem;letter-spacing:0.04em;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:5px;">Wind Forecast</div>${g24Line}${spark}${xwindRows}`);
+            showTooltip(out.join(''));
         };
 
         // Temp/Dew spread tooltip with frost warning
@@ -769,15 +766,15 @@
         window.showTempForecast = function() {
             if (!nbhHourly || nbhHourly.length === 0) return;
             // Show P90 temperatures (TMP + 1.28×TSD) — closer to actual MaxT
-            const p90Vals = nbhHourly.map(h => h.TMP != null ? (h.TMP + 1.28 * (h.TSD || 1)) : null).filter(v => v != null);
-            const mn = Math.min(...p90Vals), mx2 = Math.max(...p90Vals);
+            const p99Vals = nbhHourly.map(h => h.TMP != null ? (h.TMP + 2.33 * (h.TSD || 1)) : null).filter(v => v != null);
+            const mn = Math.min(...p99Vals), mx2 = Math.max(...p99Vals);
             // Custom sparkline using P90 values
             const W = 312, H = 52, BAR_W = Math.floor(W / nbhHourly.length);
             const baseMs2 = cycleStartTime || Date.now();
             let bars = '', labels = '';
             nbhHourly.forEach((h, i) => {
                 if (h.TMP == null) return;
-                const v = h.TMP + 1.28 * (h.TSD || 1);
+                const v = h.TMP + 2.33 * (h.TSD || 1);
                 const bh = Math.max(2, Math.round(((v - mn) / Math.max(mx2 - mn, 1)) * H));
                 const x = i * BAR_W;
                 bars += `<rect x="${x}" y="${H - bh}" width="${Math.max(BAR_W-1,1)}" height="${bh}" fill="${deciColormap('TEMPERATURE', v) || '#52525b'}" rx="1" opacity="0.9"/>`;
@@ -788,7 +785,7 @@
                 }
             });
             const spark = `<svg width="${W}" height="${H+16}" style="display:block;margin-top:5px;border-radius:3px;background:rgba(0,0,0,0.2);">${bars}${labels}</svg>`;
-            showTooltip(`<div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">Temperature Forecast (P90) <span style="float:right;font-weight:400;color:#71717a;font-size:0.6rem;">Min ${Math.round(mn)}°  Max ${Math.round(mx2)}°F</span></div>${spark}`);
+            showTooltip(`<div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">Temperature Forecast <span style="float:right;font-weight:400;color:#71717a;font-size:0.6rem;">Min ${Math.round(mn)}°  Max ${Math.round(mx2)}°F</span></div>${spark}`);
         };
         window.showDewForecast = function() {
             if (!nbhHourly || nbhHourly.length === 0) return;
@@ -869,7 +866,8 @@
                     if (block.WDR != null) metLine += `<span style="color:#71717a;"> from ${block.WDR * 10}°</span>`;
                 } else if (key === 'TEMPERATURE' && block?.TMP != null) {
                     const tCol = deciColormap('TEMPERATURE', block.TMP);
-                    metLine = `<span style="color:${tCol||'#fff'};font-weight:800;">${Math.round(block.TMP)}°F</span>`;
+                    var p99t = Math.round(block.TMP + 2.33 * (block.TSD || 1));
+                    metLine = `<span style="color:${deciColormap('TEMPERATURE', p99t)||'#fff'};font-weight:800;">${p99t}°F</span><span style="color:#71717a;"> P99 (fcst: ${Math.round(block.TMP)}°F)</span>`;
                     if (block.DPT != null) metLine += `<span style="color:#71717a;"> · Dew ${Math.round(block.DPT)}°F</span>`;
                 } else if (key === 'VISIBILITY' && block?.VIS != null) {
                     const sm = block.VIS / 10;
