@@ -316,14 +316,14 @@
 
     <script>
         // --- BACKEND URL (auto-loaded from config.json, updated by Colab Cell 6b) ---
-        let BACKEND_URL = "";
+                // Static JSON — no backend needed
         let _config = {};
         async function loadConfig() {
             try {
                 const r = await fetch('./config.json?t=' + Date.now());
                 _config = await r.json();
-                BACKEND_URL = _config.backend_url || "";
-            } catch(e) { BACKEND_URL = ""; }
+                // Static JSON — no backend needed
+                // Static JSON — no backend needed
         }
 
         const TOTAL_HOURS = 48; 
@@ -438,7 +438,6 @@
         const HAZARD_DETAILS = [
             { id: 'Wind', icon: "ph-wind", name: "Wind", prep: "Debris/high-profile vehicles" },
             { id: 'Lightning', icon: "ph-lightning", name: "Lightning", prep: "Ramp/safety closure" },
-            { id: 'Hail', icon: "ph-cloud-snow", name: "Hail", prep: "Asset damage" },
             { id: 'Snow', icon: "ph-snowflake", name: "Snow", prep: "Plow operations" },
             { id: 'Visibility', icon: "ph-eye", name: "Visibility", prep: "Driver disorientation" },
             { id: 'FZRA', icon: "ph-cloud-snow", name: "Freezing Rain", timelineName: "FRZ RAIN", prep: "Chemical treatment" },
@@ -1235,11 +1234,13 @@
                 // --- FETCH LIVE DATA (WITH NGROK BYPASS HEADER) ---
                 const fetchOpts = { headers: { "ngrok-skip-browser-warning": "true" } };
                 
+                // GitHub Actions writes threats.json and timeline.json every hour
+                const cacheBust = '?cb=' + Date.now();
                 const [metarResp, alertsResp, threatsResp, timelineResp] = await Promise.allSettled([
-                    fetchMETAR(), 
+                    fetchMETAR(),
                     fetchAlerts(),
-                    fetch(`${BACKEND_URL}/api/threats`, fetchOpts).then(r => r.json()),
-                    fetch(`${BACKEND_URL}/api/timeline`, fetchOpts).then(r => r.json())
+                    fetch('threats.json'  + cacheBust).then(r => r.json()),
+                    fetch('timeline.json' + cacheBust).then(r => r.json())
                 ]);
 
                 let refsThreats = null;
@@ -1252,7 +1253,7 @@
                     const cycleStr = threatsResp.value.cycle || '';
                     const cm = cycleStr.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2})Z/);
                     if (cm) cycleStartTime = Date.UTC(+cm[1], +cm[2]-1, +cm[3], +cm[4], 0, 0);
-                } else if (!BACKEND_URL) {
+                // Static JSON — no backend needed
                     // No backend configured — show status in threat matrix
                     const tmPanel = document.querySelector('#threat-matrix-container') || document.querySelector('.panel');
                     if (tmPanel && !document.getElementById('refs-status')) {
@@ -1278,7 +1279,12 @@
                 if(grid) {
                     grid.innerHTML = '';
                     
-                    const hazardMapping = { 'Cold': 'COLD', 'Heat': 'HEAT', 'FlashFreeze': 'FLASH_FREEZE' };
+                    const hazardMapping = {
+                        'Cold':'COLD','Heat':'HEAT','FlashFreeze':'FLASH_FREEZE',
+                        'Wind':'WIND','Lightning':'LIGHTNING','Snow':'SNOW',
+                        'Visibility':'VISIBILITY','Fzra':'FZRA','Rain':'RAIN',
+                        'Temperature':'TEMPERATURE'
+                    };
 
                     const hazards = HAZARD_DETAILS.map(h => {
                         let prob = 0;
@@ -1329,7 +1335,29 @@
                             || (threatLevel > 0 ? FALLBACK_METRICS[refKey]?.[2] : 'None') 
                             || 'None';
                         
-                        const timeString = getHazardTimeString(h.id, refsTimeline);
+                        // Get timing from NBM threats peak block
+                        let timeString = '';
+                        const refKey3 = ({Cold:'COLD',Heat:'HEAT',Wind:'WIND',Lightning:'LIGHTNING',
+                                          Snow:'SNOW',Visibility:'VISIBILITY',Fzra:'FZRA',
+                                          FlashFreeze:'FLASH_FREEZE',Rain:'RAIN',
+                                          Temperature:'TEMPERATURE'})[h.id]
+                                         || h.id.toUpperCase().replace('FLASHFREEZE','FLASH_FREEZE');
+                        const thr = refsThreats?.[refKey3];
+                        if (thr && thr.peak_start_fxx && thr.prob > 0) {
+                            const d1 = new Date(globalNow.getTime() + thr.peak_start_fxx * 3600000);
+                            const d2 = new Date(globalNow.getTime() + thr.peak_end_fxx   * 3600000);
+                            const nowMs = globalNow.getTime();
+                            if (d2.getTime() > nowMs) {
+                                const fmt = d => {
+                                    const hh=d.getHours(); const ap=hh>=12?'P':'A';
+                                    const dy=d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase();
+                                    return `${dy} ${hh%12||12}${ap}`;
+                                };
+                                timeString = d1.getTime() < nowMs
+                                    ? `NOW → ${fmt(d2)}`
+                                    : `${fmt(d1)} - ${fmt(d2)}`;
+                            }
+                        }
 
                         const card = document.createElement('div');
                         card.className = 'ops-card flex flex-col justify-between p-3';
@@ -1379,18 +1407,23 @@
                         const classStr = isDay ? 'day-segment' : 'night-segment';
                         const width = 100 / TOTAL_HOURS;
                         bgCtx.innerHTML += `<div class="${classStr}" style="width: ${width}%;" onmouseenter="showHourTooltip(${i})" onmouseleave="hideTooltip()"></div>`;
-                        if (new Date(globalNow.getTime() + i*3600000).getHours() === 0) {
-                            const leftPos = (i / TOTAL_HOURS) * 100;
-                            const dayName = new Date(globalNow.getTime() + i*3600000).toLocaleDateString('en-US', { weekday: 'short' });
-                            linesCtx.innerHTML += `<div class="midnight-line" style="left: ${leftPos}%;"><div class="midnight-label">${dayName}</div></div>`;
+                        // Midnight lines aligned to blocks
+                        const _hDate2 = new Date(globalNow.getTime() + i*3600000);
+                        if (_hDate2.getHours() === 0) {
+                            // Snap to nearest block boundary
+                            const blockPos = Math.round(i / 3) / 16 * 100;
+                            const dayName = _hDate2.toLocaleDateString('en-US', { weekday: 'short' });
+                            linesCtx.innerHTML += `<div class="midnight-line" style="left: ${blockPos}%;"><div class="midnight-label">${dayName}</div></div>`;
                         }
                     }
 
-                    for(let i=0; i<=TOTAL_HOURS; i+=6) {
-                        const leftPos = (i / TOTAL_HOURS) * 100;
-                        let topLabel = i === 0 ? 'Now' : `+${i}h`;
-                        let timeLabel = getHourLabel(globalNow, i);
-                        let alignClass = i===0 ? '' : (i===TOTAL_HOURS ? 'transform -translate-x-full' : 'transform -translate-x-1/2');
+                    // Axis: one label per 3-hour block (every 2 blocks = every 6h for clarity)
+                    for(let bi=0; bi<=16; bi+=2) {
+                        const leftPos = (bi / 16) * 100;
+                        const hoursOut = bi * 3;
+                        let topLabel = bi === 0 ? 'Now' : `+${hoursOut}h`;
+                        let timeLabel = getHourLabel(globalNow, hoursOut);
+                        let alignClass = bi===0 ? '' : (bi===16 ? 'transform -translate-x-full' : 'transform -translate-x-1/2');
                         axisCtx.innerHTML += `
                             <div class="absolute top-0 ${alignClass} text-center" style="left: ${leftPos}%">
                                 <div class="font-bold text-slate-400">${topLabel}</div>
@@ -1398,33 +1431,47 @@
                             </div>`;
                     }
 
+                    // ── NBM 3-hour block timeline (16 blocks × 3h = 48h) ──────────────────
+                    const N_BLOCKS = 16;
+                    const BLOCK_W  = 100 / N_BLOCKS;
+                    const BLK_BG   = {0:'#3f3f46',1:'#e2f0cb',2:'#ffeb3b',3:'#ff9800',4:'#f44336',5:'#9c27b0'};
+                    const BLK_TX   = {0:'#71717a',1:'#1a3a0a',2:'#3f3000',3:'#3f1a00',4:'#ffffff',5:'#ffffff'};
+
+                    const HZ_KEY = (id) => ({
+                        Cold:'COLD',Heat:'HEAT',Wind:'WIND',Lightning:'LIGHTNING',
+                        Snow:'SNOW',Visibility:'VISIBILITY',Fzra:'FZRA',
+                        FlashFreeze:'FLASH_FREEZE',Rain:'RAIN',
+                        Temperature:'TEMPERATURE'
+                    })[id] || id.toUpperCase().replace('FLASHFREEZE','FLASH_FREEZE');
+
                     HAZARD_DETAILS.forEach(h => {
                         const axisLabel = h.timelineName || h.name;
-                        labelsCtx.innerHTML += `<div class="h-full flex items-center justify-end text-xs font-bold text-slate-400 uppercase tracking-widest">${axisLabel}</div>`;
-                        
-                        let rowHtml = `<div class="timeline-row">
-                            <div class="horizontal-guide"></div>
-                            <div class="bar-container">`;
-                        
-                        // Offset bars by hours since cycle start so they align with the "from now" x-axis
-                        const cycleOffsetHrs = cycleStartTime ? (globalNow.getTime() - cycleStartTime) / 3600000 : 0;
-                        for (let fxx = 1; fxx <= TOTAL_HOURS; fxx++) {
-                            const hoursFromNow = fxx - cycleOffsetHrs;
-                            const width = 100 / TOTAL_HOURS;
-                            const left = (hoursFromNow / TOTAL_HOURS) * 100;
-                            if (left < -width || left > 100) continue;
+                        labelsCtx.innerHTML += `<div class="h-full flex items-center justify-end text-xs font-bold text-slate-400 pr-2 uppercase tracking-wider">${axisLabel}</div>`;
 
-                            // Get mean value and color from DESI colormap
-                            const refKey2 = ({Cold:'COLD',Heat:'HEAT',FlashFreeze:'FLASH_FREEZE'})[h.id] || h.id.toUpperCase();
-                            const hourData = refsTimeline?.[refKey2]?.[String(fxx)] || refsTimeline?.[refKey2]?.[fxx];
-                            const meanVal = hourData?.mean ?? null;
-                            const meanColor = deciColormap(refKey2, meanVal);
-                            const units = MEAN_UNITS[refKey2] || '';
-                            const tipVal = meanVal !== null ? `${meanVal} ${units}` : 'no data';
-                            const bgColor = meanColor || '#1c1c1e';
-                            const opacity = meanVal !== null && meanVal > 0 ? 1.0 : 0.15;
+                        const refKey = HZ_KEY(h.id);
+                        let rowHtml = `<div class="timeline-row"><div class="horizontal-guide"></div><div class="bar-container">`;
 
-                            rowHtml += `<div class="timeline-block" title="${tipVal}" style="left: ${left}%; width: ${width}%; opacity: ${opacity}; background-color: ${bgColor};"></div>`;
+                        for (let bi = 0; bi < N_BLOCKS; bi++) {
+                            const left  = bi * BLOCK_W;
+                            const bhaz  = nbmBlockHazards?.[bi]?.[refKey];
+                            const prob  = bhaz?.prob ?? 0;
+                            const risk  = bhaz?.risk ?? 0;
+                            const bg    = BLK_BG[risk] || BLK_BG[0];
+                            const tx    = BLK_TX[risk] || BLK_TX[0];
+
+                            // Tooltip: time window + probability
+                            const sf = bi*3+1;
+                            const d1 = new Date(globalNow.getTime() + sf*3600000);
+                            const d2 = new Date(globalNow.getTime() + (sf+2)*3600000);
+                            const tf = d => { const hh=d.getHours(); return `${hh%12||12}${hh>=12?'P':'A'}`; };
+                            const tip = `${tf(d1)}-${tf(d2)}: ${Math.round(prob)}%${bhaz?.level>0?' L'+bhaz.level:''}`;
+
+                            // Show prob % text on colored blocks only
+                            const txt = risk > 0
+                                ? `<span style="font-size:0.6rem;font-weight:800;color:${tx};line-height:1;pointer-events:none">${Math.round(prob)}%</span>`
+                                : '';
+
+                            rowHtml += `<div class="timeline-block" title="${tip}" style="left:${left.toFixed(2)}%;width:${BLOCK_W.toFixed(2)}%;background:${bg};display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(0,0,0,0.25);">${txt}</div>`;
                         }
 
                         rowHtml += `</div></div>`;
