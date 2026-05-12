@@ -764,71 +764,88 @@
             showTooltip(tip);
         };
 
-        window.showHourTooltip = function(bi, refKey) {
-            const blk = nbmBlocks?.[bi];
-            if (!blk) return;
-            const cycMs = cycleStartTime || globalNow.getTime();
-            // Cycle-accurate start/end times for this 3-hour block
-            const d1 = new Date(cycMs + blk.start_fxx * 3600000);
-            const d2 = new Date(cycMs + (blk.end_fxx + 1) * 3600000);
-            const tf = d => {
-                const hh = d.getHours(); const ap = hh >= 12 ? 'P' : 'A';
-                return `${hh % 12 || 12}${ap}`;
+        window.showHourTooltip = function(offset) {
+            // offset = hours from now (0-47); block index derived from it
+            const bi    = Math.min(Math.max(Math.floor(offset / 3), 0), 15);
+            const block = nbmBlocks?.[bi];
+            const bhaz  = nbmBlockHazards?.[bi];
+
+            // Time window: displayed relative to globalNow + offset
+            const d1 = new Date(globalNow.getTime() + offset * 3600000);
+            const d2 = new Date(globalNow.getTime() + Math.min(offset + 3, 48) * 3600000);
+            const fmt = d => {
+                let h = d.getHours(); const ap = h >= 12 ? 'P' : 'A';
+                h = h % 12 || 12;
+                const dy = d.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
+                return `${dy} ${h}${ap}`;
             };
-            const dy = d => d.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
-            const timeLabel = `${dy(d1)} ${tf(d1)} – ${dy(d2)} ${tf(d2)}`;
-            const zulaStr   = `${String(d1.getUTCHours()).padStart(2,'0')}Z – ${String(d2.getUTCHours()).padStart(2,'0')}Z`;
+            const zStr = `${String(d1.getUTCHours()).padStart(2,'0')}Z`;
 
-            // Pull hazard data for the block
-            const key = refKey || 'WIND';
-            const bhaz = nbmBlockHazards?.[bi]?.[key];
-            const blkData = nbmBlocks?.[bi] || {};
+            // Pick highest risk across all hazards this block
+            const allRisks = bhaz ? Object.values(bhaz).map(v => v?.risk || 0) : [0];
+            const maxRisk  = Math.max(...allRisks);
+            const hdrCol   = (RISK_LEVELS[maxRisk] || RISK_LEVELS[0]).color;
 
-            let lines = [];
+            let rows = '';
+            HAZARD_DETAILS.forEach(h => {
+                const key   = (HZ_KEY_MAP || {})[h.id] || h.id.toUpperCase().replace('FLASHFREEZE','FLASH_FREEZE');
+                const hdata = bhaz?.[key];
+                const risk  = hdata?.risk  ?? 0;
+                const prob  = hdata?.prob  ?? 0;
+                if (prob === 0 && risk === 0) return;
 
-            // Wind
-            const gst = blkData.GST; const wsp = blkData.WSP; const wdr = blkData.WDR;
-            if (gst != null) {
-                const gustLine = `Max gust potential: <b>${Math.round(gst)} mph</b>`;
-                const spdLine  = wsp != null ? `Wind speed: ${Math.round(wsp)} mph` : '';
-                const dirLine  = wdr != null ? `Direction: ${wdr * 10}°` : '';
-                lines.push(gustLine);
-                if (spdLine) lines.push(spdLine);
-                if (dirLine) lines.push(dirLine);
-            }
-            // Temp + Dew
-            const tmp = blkData.TMP; const dpt = blkData.DPT;
-            if (tmp != null) lines.push(`Temperature: <b>${Math.round(tmp)}°F</b>`);
-            if (dpt != null) lines.push(`Dewpoint: ${Math.round(dpt)}°F`);
-            // Thunder
-            const t01 = blkData.T01; const t06 = blkData.T06;
-            const thr = t01 ?? t06;
-            if (thr != null && thr > 0) lines.push(`Thunder: <b>${thr}%</b>`);
-            // Precip
-            const p01 = blkData.P01; const q01 = blkData.Q01;
-            if (p01 != null && p01 > 0) lines.push(`PoP: ${p01}%`);
-            if (q01 != null && q01 > 0) lines.push(`QPF: ${(q01/100).toFixed(2)} in/hr`);
-            // Visibility
-            const vis = blkData.VIS;
-            if (vis != null) lines.push(`Visibility: ${vis >= 100 ? '10+' : (vis/10).toFixed(1)} SM`);
-            // Snow
-            const s06 = blkData.S06;
-            if (s06 != null && s06 > 0) lines.push(`Snow: ${(s06/10).toFixed(1)} in`);
+                const cfg    = RISK_LEVELS[risk] || RISK_LEVELS[0];
+                const bgCol  = cfg.color + '1a';
+                const txtCol = risk > 0 ? cfg.color : '#71717a';
 
-            const hazLabel = bhaz && bhaz.risk > 0
-                ? `<div style="font-size:0.58rem;color:${bhaz.color || '#71717a'};font-weight:700;text-transform:uppercase;margin-top:3px;">${bhaz.risk_label || ''} — ${Math.round(bhaz.prob || 0)}%</div>`
+                let metLine = '';
+                if (key === 'WIND' && block?.GST != null) {
+                    const gCol = deciColormap('WIND', block.GST);
+                    metLine = `<span style="color:${gCol||'#fff'};font-weight:800;">${Math.round(block.GST)} mph max gust</span>`;
+                    if (block.WSP != null) metLine += `<span style="color:#71717a;"> · ${Math.round(block.WSP)} mph avg</span>`;
+                    if (block.WDR != null) metLine += `<span style="color:#71717a;"> from ${block.WDR * 10}°</span>`;
+                } else if (key === 'TEMPERATURE' && block?.TMP != null) {
+                    const tCol = deciColormap('TEMPERATURE', block.TMP);
+                    metLine = `<span style="color:${tCol||'#fff'};font-weight:800;">${Math.round(block.TMP)}°F</span>`;
+                    if (block.DPT != null) metLine += `<span style="color:#71717a;"> · Dew ${Math.round(block.DPT)}°F</span>`;
+                } else if (key === 'VISIBILITY' && block?.VIS != null) {
+                    const sm = block.VIS / 10;
+                    const vCol = deciColormap('VISIBILITY', sm);
+                    metLine = `<span style="color:${vCol||'#fff'};font-weight:800;">${sm >= 10 ? '10+ SM' : sm.toFixed(1) + ' SM'}</span>`;
+                } else if (key === 'LIGHTNING') {
+                    metLine = `<span style="color:${txtCol};font-weight:800;">${Math.round(prob)}% thunder</span>`;
+                } else if (key === 'SNOW' && block?.S06 > 0) {
+                    const rate = ((block.S06 / 10) / 6).toFixed(2);
+                    metLine = `<span style="color:${deciColormap('SNOW', parseFloat(rate))||'#fff'};font-weight:800;">${rate} in/hr</span>`;
+                } else if (key === 'RAIN' && block?.Q01 > 0) {
+                    const rate = (block.Q01 / 100).toFixed(2);
+                    metLine = `<span style="color:${deciColormap('RAIN', parseFloat(rate))||'#fff'};font-weight:800;">${rate} in/hr</span>`;
+                } else if (key === 'FZRA' && block?.ZR6 > 0) {
+                    metLine = `<span style="color:#60a5fa;font-weight:800;">${(block.ZR6/100).toFixed(3)}" FZRA / 6hr</span>`;
+                } else if (key === 'FLASH_FREEZE' && block?.TMP != null && block?.DPT != null) {
+                    const tw = block.TMP - (block.TMP - block.DPT) / 3;
+                    metLine = `<span style="color:${deciColormap('FLASH_FREEZE', tw)||'#fff'};font-weight:800;">Tw ${Math.round(tw)}°F</span>`;
+                }
+
+                rows += `<div style="margin-bottom:4px;padding:4px 6px;border-radius:3px;background:${bgCol};border-left:3px solid ${cfg.color};">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                        <span style="font-weight:800;font-size:0.68rem;color:#e4e4e7;text-transform:uppercase;">${h.name}</span>
+                        <span style="font-size:0.62rem;font-weight:800;color:${txtCol};">${cfg.name.toUpperCase()} ${Math.round(prob)}%</span>
+                    </div>
+                    ${metLine ? `<div style="font-size:0.63rem;font-family:monospace;margin-top:2px;">${metLine}</div>` : ''}
+                    ${risk > 0 && h.prep ? `<div style="font-size:0.58rem;color:#71717a;margin-top:2px;">→ ${h.prep}</div>` : ''}
+                </div>`;
+            });
+
+            const noData = !rows
+                ? `<div style="color:#52525b;font-size:0.68rem;text-align:center;padding:6px;">No active hazards this period</div>`
                 : '';
 
-            const body = lines.map(l => `<div style="font-size:0.65rem;font-family:monospace;color:#e4e4e7;margin-top:2px;">${l}</div>`).join('');
-
-            const tip = `
-                <div style="font-weight:800;font-size:0.68rem;color:white;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">
-                    ${timeLabel}
-                    <span style="float:right;font-weight:400;color:#52525b;font-size:0.58rem;">${zulaStr}</span>
+            showTooltip(`
+                <div style="font-size:0.68rem;font-weight:800;color:${hdrCol};border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:5px;">
+                    ${fmt(d1)} – ${fmt(d2)}<span style="float:right;font-weight:400;color:#52525b;font-size:0.58rem;">${zStr} · +${offset}h</span>
                 </div>
-                ${body}
-                ${hazLabel}`;
-            showTooltip(tip);
+                ${rows}${noData}`);
         };
 
         function getHazardTimeString(h_id, refsTimeline) {
@@ -1928,7 +1945,10 @@
                                 ? `<span style="font-size:0.6rem;font-weight:800;color:${tx};line-height:1;pointer-events:none">${Math.round(prob)}%</span>`
                                 : '';
 
-                            rowHtml += `<div class="timeline-block" title="${tip}" style="left:${leftPct}%;width:${widthPct}%;background:${bg};display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(0,0,0,0.18);position:absolute;">${txt}</div>`;
+                            // Compute hours-from-now for this block so tooltip gets correct time
+                            const _hrOff = Math.round((cycleMs + sFxx*3600000 - globalNow.getTime()) / 3600000);
+                            const _hrClamp = Math.max(0, Math.min(47, _hrOff));
+                            rowHtml += `<div class="timeline-block" title="${tip}" style="left:${leftPct}%;width:${widthPct}%;background:${bg};display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(0,0,0,0.18);position:absolute;cursor:help;" onmouseenter="showHourTooltip(${_hrClamp})" onmouseleave="hideTooltip()">${txt}</div>`;
                         }
 
                         rowHtml += `</div></div>`;
