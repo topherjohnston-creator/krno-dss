@@ -210,9 +210,9 @@
             <div class="flex-grow flex gap-3 min-h-0">
 
                 <!-- LEFT: Big Wind Graphic -->
-                <div class="asos-box flex flex-col items-center justify-between" id="wind-obs-box" style="width:48%; padding:10px;"
-                     onmouseenter="showWindForecast()" onmouseleave="hideTooltip()">
-                    <div class="asos-label w-full">WIND</div>
+                <div class="asos-box flex flex-col items-center justify-between" id="wind-obs-box" style="width:48%; padding:10px;">
+                    <div class="asos-label w-full" style="cursor:crosshair;"
+                         onmouseenter="showWindForecast()" onmouseleave="hideTooltip()">WIND</div>
 
                     <!-- Flight cat + xwind badges -->
                     <div class="flex gap-2 mt-1 w-full justify-end">
@@ -265,8 +265,9 @@
                         </svg>
                     </div>
 
-                    <!-- Speed / Gust / Direction -->
-                    <div class="w-full text-center" style="margin-top:4px;cursor:crosshair;">
+                    <!-- Speed / Gust / Direction — hover here for wind forecast -->
+                    <div class="w-full text-center" style="margin-top:4px;cursor:crosshair;padding:6px 0 2px;"
+                         onmouseenter="showWindForecast()" onmouseleave="hideTooltip()">
                         <div style="font-family:'JetBrains Mono',monospace; font-size:2.6rem; font-weight:800; color:white; line-height:1; display:flex; align-items:baseline; justify-content:center; gap:5px;">
                             <span id="w-spd">--</span>
                             <span style="font-size:0.9rem; color:#71717a; font-weight:400;">G</span>
@@ -503,19 +504,7 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             initDashboard();
-            // Belt+suspenders: also attach wind hover via JS in case inline attr fails
-            document.addEventListener('mouseover', function(e) {
-                var box = document.getElementById('wind-obs-box');
-                if (box && box.contains(e.target) && !box.contains(e.relatedTarget)) {
-                    showWindForecast();
-                }
-            });
-            document.addEventListener('mouseout', function(e) {
-                var box = document.getElementById('wind-obs-box');
-                if (box && box.contains(e.target) && !box.contains(e.relatedTarget)) {
-                    hideTooltip();
-                }
-            });
+
 
             // Clock — update every second
             setInterval(() => {
@@ -879,8 +868,9 @@
                     if (block.WDR != null) metLine += `<span style="color:#71717a;"> from ${block.WDR * 10}°</span>`;
                 } else if (key === 'TEMPERATURE' && block?.TMP != null) {
                     const tCol = deciColormap('TEMPERATURE', block.TMP);
-                    var p99t = Math.round(block.TMP + 2.33 * (block.TSD || 1));
-                    metLine = `<span style="color:${deciColormap('TEMPERATURE', p99t)||'#fff'};font-weight:800;">${p99t}°F</span>`;
+                    var tmpC = deciColormap('TEMPERATURE', Math.round(block.TMP)) || '#fff';
+                    metLine = `<span style="color:${tmpC};font-weight:800;">${Math.round(block.TMP)}°F</span>`;
+                    if (block.TSD != null) metLine += `<span style="color:#71717a;"> (P99: ${Math.round(block.TMP + 2.33 * (block.TSD || 1))}°F)</span>`;
                     if (block.DPT != null) metLine += `<span style="color:#71717a;"> · Dew ${Math.round(block.DPT)}°F</span>`;
                 } else if (key === 'VISIBILITY' && block?.VIS != null) {
                     const sm = block.VIS / 10;
