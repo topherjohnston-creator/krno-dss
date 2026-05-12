@@ -276,6 +276,10 @@ def make_blocks(nbh, nbs):
             'Q01': mx('Q01') if nbh_hrs else nbs_q01,
             'VIS': mn('VIS'), 'MVV': mx('MVV'), 'IFV': mx('IFV'), 'LIV': mx('LIV'),
             'S06': _nbs('S06'), 'ZR6': _nbs('ZR6'), 'T06': _nbs('T06'),
+            # P90 approx for tooltip display: mean + 1.28 * std
+            'GST_P90': round(mx('GST') + 1.28 * (av('GSD') or 3), 1) if (mx('GST') and av('GSD')) else mx('GST'),
+            'TMP_P90': round(av('TMP') + 1.28 * (av('TSD') or 3), 1) if (av('TMP') and av('TSD')) else av('TMP'),
+            'TMP_P10': round(av('TMP') - 1.28 * (av('TSD') or 3), 1) if (av('TMP') and av('TSD')) else av('TMP'),
         }
         blocks.append(b)
     return blocks
@@ -313,7 +317,7 @@ def compute_block(block, bi, nbp):
 
     # -- LIGHTNING ------------------------------------------------------------
     t01 = block.get('T01') or block.get('T06') or 0
-    ll = 5 if t01>=75 else 4 if t01>=50 else 3 if t01>=25 else 2 if t01>=5 else 0
+    ll = 5 if t01>=75 else 4 if t01>=50 else 3 if t01>=25 else 2 if t01>=5 else 1 if t01>0 else 0
     h["LIGHTNING"] = {"prob": float(t01), "risk": risk_matrix(t01, ll),
                       "level": ll, "color": RISK_C[risk_matrix(t01, ll)]}
 
@@ -364,42 +368,29 @@ def compute_block(block, bi, nbp):
     h["RAIN"] = {"prob": rp, "risk": risk_matrix(rp, rl), "level": rl,
                  "color": RISK_C[risk_matrix(rp, rl)]}
 
-    # -- COLD (scan mild->extreme, break on first miss) -----------------------
-    # Use TXNP percentiles for accurate distribution; fall back to TXNMN/TXNSD.
-    day = "D2" if d2 else "D1"
-    mint_p50 = nbp.get(f"TMIN_{day}_P50")
-    mint_p10 = nbp.get(f"TMIN_{day}_P10")
-    mint_p90 = nbp.get(f"TMIN_{day}_P90")
-    if mint_p50 is not None:
-        mint, mint_std = pct_to_gaussian(mint_p10, mint_p50, mint_p90)
-        mint_std = mint_std or 3
-    else:
-        mint = nbp.get(f"TMIN_D{'2' if d2 else '1'}_P50")  # may still be None
-        mint_std = nbp.get(f"TMIN_D{'2' if d2 else '1'}_STD") or 3
+    # -- COLD (block TMP -- time-varying) ------------------------------------
+    # Use the block's actual forecast temperature so each 3-hr period reflects
+    # when it's truly cold (overnight low), not a uniform daily min applied
+    # to all 8 D1 blocks including the afternoon.
+    tmp  = block.get('TMP')
+    tsd  = max(block.get('TSD') or 3, 0.5)
     cp, cl = 0.0, 0
-    if mint:
+    if tmp is not None:
         for t, l in [(40,2),(32,3),(20,4),(0,5)]:
-            p = gauss_below(mint, mint_std, t)
+            p = gauss_below(tmp, tsd, t)
             if p >= 5.0: cp, cl = p, l
             else: break
     h["COLD"] = {"prob": cp, "risk": risk_matrix(cp, cl), "level": cl,
                  "color": RISK_C[risk_matrix(cp, cl)]}
 
-    # -- HEAT (scan mild->extreme, break on first miss) -----------------------
-    # Use TXNP percentiles for accurate distribution; fall back to TXNMN/TXNSD.
-    maxt_p50 = nbp.get(f"TMAX_{day}_P50")
-    maxt_p10 = nbp.get(f"TMAX_{day}_P10")
-    maxt_p90 = nbp.get(f"TMAX_{day}_P90")
-    if maxt_p50 is not None:
-        maxt, maxt_std = pct_to_gaussian(maxt_p10, maxt_p50, maxt_p90)
-        maxt_std = maxt_std or 3
-    else:
-        maxt = nbp.get(f"TMAX_D{'2' if d2 else '1'}_P50")
-        maxt_std = nbp.get(f"TMAX_D{'2' if d2 else '1'}_STD") or 3
+    # -- HEAT (block TMP -- time-varying) ------------------------------------
+    # Same approach as COLD: use block TMP so heat risk only appears during
+    # the actual warm hours of the day. A 91F afternoon block triggers heat;
+    # a 65F midnight block correctly shows nothing.
     hp, hl = 0.0, 0
-    if maxt:
+    if tmp is not None:
         for t, l in [(90,2),(95,3),(100,4),(105,5)]:
-            p = gauss_above(maxt, maxt_std, t)
+            p = gauss_above(tmp, tsd, t)
             if p >= 5.0: hp, hl = p, l
             else: break
     h["HEAT"] = {"prob": hp, "risk": risk_matrix(hp, hl), "level": hl,
