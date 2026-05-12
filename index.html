@@ -210,7 +210,8 @@
             <div class="flex-grow flex gap-3 min-h-0">
 
                 <!-- LEFT: Big Wind Graphic -->
-                <div class="asos-box flex flex-col items-center justify-between" style="width:48%; padding:10px;">
+                <div class="asos-box flex flex-col items-center justify-between" style="width:48%; padding:10px;"
+                     onmouseenter="showWindForecast()" onmouseleave="hideTooltip()">
                     <div class="asos-label w-full">WIND</div>
 
                     <!-- Flight cat + xwind badges -->
@@ -266,8 +267,7 @@
                     </div>
 
                     <!-- Speed / Gust / Direction -->
-                    <div class="w-full text-center" style="margin-top:4px;cursor:crosshair;"
-                         onmouseenter="showWindForecast()" onmouseleave="hideTooltip()">
+                    <div class="w-full text-center" style="margin-top:4px;cursor:crosshair;">
                         <div style="font-family:'JetBrains Mono',monospace; font-size:2.6rem; font-weight:800; color:white; line-height:1; display:flex; align-items:baseline; justify-content:center; gap:5px;">
                             <span id="w-spd">--</span>
                             <span style="font-size:0.9rem; color:#71717a; font-weight:400;">G</span>
@@ -530,7 +530,7 @@
             }, 1000);
 
             // REFS threats + timeline — every 30 minutes
-            setInterval(() => { initDashboard(); }, 30 * 60 * 1000);
+            setInterval(() => { initDashboard(); }, 15 * 60 * 1000);  // 15-min: catches new NBM data promptly
 
             // Tick "updated X ago" display every 30 seconds
             setInterval(() => {
@@ -1744,15 +1744,13 @@
                         const dot   = document.getElementById('cycle-fresh-dot');
                         const label = document.getElementById('cycle-fresh-label');
                         if (dot && label) {
-                            const cycD = new Date(cycleStartTime);
-                            const mo   = cycD.toLocaleDateString('en-US', {month:'short'});
-                            const dy   = cycD.getDate();
-                            const yr   = cycD.getFullYear();
-                            const zHH  = String(cycD.getUTCHours()).padStart(2,'0');
+                            // Show full cycle string e.g. "NBH 09Z / NBS 09Z / NBP 07Z"
+                            const cycleStr = threatsResp.value.cycle || '';
                             dot.style.background   = fresh ? '#22c55e' : '#ef4444';
                             dot.style.animation    = fresh ? 'live-pulse 2s ease-in-out infinite' : 'sop-flash 1.5s infinite';
-                            label.textContent = `${mo} ${dy}, ${yr} ${zHH}:00Z`;
-                            label.style.color = fresh ? '#52525b' : '#7f1d1d';
+                            dot.title              = fresh ? 'Forecast is current' : 'Forecast may be stale (>3h old)';
+                            label.textContent      = cycleStr;
+                            label.style.color      = fresh ? '#52525b' : '#ef4444';
                         }
                     }
                 }
@@ -1821,7 +1819,7 @@
                             'RAIN':        {2:'0.1-0.25"/hr', 3:'0.25-0.5"/hr',  4:'0.5-1"/hr',   5:'>1"/hr'},
                             'FZRA':        {2:'Trace',        3:'Trace-0.01"',   4:'0.01-0.1"',   5:'>0.1"'},
                             'FLASH_FREEZE':{2:'Wet+<36°F',    3:'Wet+<32°F',     4:'Wet+<28°F',   5:'Wet+<25°F'},
-                            'TEMPERATURE': {2:'90-95°F',      3:'95-100°F',      4:'100-105°F',   5:'>105°F'},
+                            'TEMPERATURE': {1:'85-90°F', 2:'90-95°F',      3:'95-100°F',      4:'100-105°F',   5:'>105°F'},
                         };
                         const threatData = refsThreats && refsThreats[refKey];
                         const threatLevel = threatData?.level || h.risk || 0;
