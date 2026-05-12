@@ -316,7 +316,14 @@ def compute_block(block, bi, nbp):
     h["WIND"] = {"prob": wp, "risk": rk, "level": wl, "color": RISK_C[rk]}
 
     # -- LIGHTNING ------------------------------------------------------------
-    t01 = block.get('T01') or block.get('T06') or 0
+    # D1 blocks: T01 only (NBH hourly — correctly attributed to the 1-hr slot).
+    # D2 blocks: T06 from NBS (T01 unavailable; unavoidable 6-hr aggregate).
+    # Never mix T01/T06 in D1: NBS T06 covers the NEXT 6 hours from that FHR,
+    # which is an entirely different window than the 3-hr block it gets assigned to.
+    if not d2:
+        t01 = block.get('T01') or 0
+    else:
+        t01 = block.get('T06') or block.get('T01') or 0
     ll = 5 if t01>=75 else 4 if t01>=50 else 3 if t01>=25 else 2 if t01>=5 else 1 if t01>0 else 0
     h["LIGHTNING"] = {"prob": float(t01), "risk": risk_matrix(t01, ll),
                       "level": ll, "color": RISK_C[risk_matrix(t01, ll)]}
@@ -509,6 +516,110 @@ def main():
         json.dump({"blocks": blocks, "block_hazards": block_hazards,
                    "cycle": cycle_label, "last_updated": now_iso},
                   f, default=serialize)
+
+
+    # ── WIND card override: use NBP G24 (24-hr max gust distribution) ─────────
+    # The block-level GST (instantaneous hourly gust) is correct for the timeline,
+    # showing WHEN winds will be strongest. But for the card, G24 gives the proper
+    # day-level aggregate: "what's the 24-hr maximum gust distribution?"
+    # G24P5=48 mph correctly shows level-3 (45-58 mph) vs block GST=35 → level-2.
+    for day_str, bi_range in [('D1', range(8)), ('D2', range(8, 16))]:
+        p10 = nbp.get(f'G24_{day_str}_P10')
+        p50 = nbp.get(f'G24_{day_str}_P50')
+        p90 = nbp.get(f'G24_{day_str}_P90')
+        if p50 is None: continue
+        gm, gs = pct_to_gaussian(p10, p50, p90)
+        if gm is None: continue
+        if   gm >= 65: wl, low = 5, 65
+        elif gm >= 58: wl, low = 4, 58
+        elif gm >= 45: wl, low = 3, 45
+        elif gm >= 30: wl, low = 2, 30
+        else:          wl, low = 0, 30
+        wp = gauss_above(gm, gs, low)
+        if wl == 0 and wp < 5.0: wp, wl = 0.0, 0
+        elif wl == 0: wl = 2
+        if wl == 0: continue
+        rk = risk_matrix(wp, wl)
+        # Override if G24 gives equal or better result (higher level = more informative)
+        curr = threats.get('WIND', {})
+        if wl >= curr.get('level', 0):
+            peak_bi = max(
+                [i for i in bi_range if blocks[i] and blocks[i].get('GST') is not None],
+                key=lambda i: blocks[i].get('GST', 0), default=None)
+            pb = blocks[peak_bi] if peak_bi is not None else None
+            threats['WIND'].update({
+                "prob": round(wp, 1), "risk": rk, "risk_label": RISK_L[rk],
+                "color": RISK_C[rk], "level": wl,
+                "metric": METRICS.get("WIND", {}).get(wl, ""),
+            })
+            if pb:
+                threats['WIND'].update({
+                    "peak_start_fxx": pb["start_fxx"],
+                    "peak_end_fxx":   pb["end_fxx"],
+                    "peak_utc_start": pb["utc_start"],
+                })
+
+    # ── TEMPERATURE card override: use NBP TXNP percentiles ──────────────────
+    # Block TMP (hourly) correctly drives the timeline — shows when it's
+    # actually hot/cold during specific periods. But for the card, the NBP
+    # TXNP daily MaxT/MinT distribution captures the full probability range,
+    # including the ~2°F gap between NBH hourly peak and the calibrated daily max.
+    # Example: NBH peaks at 88°F (no heat risk per block), but NBP MaxT P50=90°F
+    # → 50% chance of hitting the 90°F threshold → MINOR heat on the card.
+    for day_str, bi_range in [('D1', range(8)), ('D2', range(8, 16))]:
+        dk = '2' if day_str == 'D2' else '1'
+        tmax_p50 = nbp.get(f'TMAX_D{dk}_P50')
+        tmax_p10 = nbp.get(f'TMAX_D{dk}_P10')
+        tmax_p90 = nbp.get(f'TMAX_D{dk}_P90')
+        tmin_p50 = nbp.get(f'TMIN_D{dk}_P50')
+        if tmax_p50 is None: continue
+
+        # Heat
+        maxt, maxt_std = pct_to_gaussian(tmax_p10, tmax_p50, tmax_p90)
+        hp, hl = 0.0, 0
+        if maxt:
+            for t, l in [(90,2),(95,3),(100,4),(105,5)]:
+                p = gauss_above(maxt, maxt_std or 3, t)
+                if p >= 5.0: hp, hl = p, l
+                else: break
+
+        # Cold
+        cp, cl = 0.0, 0
+        if tmin_p50 is not None:
+            mint_std = nbp.get(f'TMIN_D{dk}_STD') or 3
+            for t, l in [(40,2),(32,3),(20,4),(0,5)]:
+                p = gauss_below(tmin_p50, mint_std, t)
+                if p >= 5.0: cp, cl = p, l
+                else: break
+
+        if risk_matrix(hp, hl) >= risk_matrix(cp, cl):
+            card_p, card_l, met_key = hp, hl, 'HEAT'
+        else:
+            card_p, card_l, met_key = cp, cl, 'COLD'
+
+        card_rk = risk_matrix(card_p, card_l)
+        if card_l == 0: continue
+        curr_temp = threats.get('TEMPERATURE', {})
+        if card_rk >= curr_temp.get('risk', 0):
+            # Timing: block with hottest (or coldest) TMP in this day range
+            if met_key == 'HEAT':
+                tmp_bi = max([i for i in bi_range if blocks[i] and blocks[i].get('TMP') is not None],
+                             key=lambda i: blocks[i].get('TMP', -999), default=None)
+            else:
+                tmp_bi = min([i for i in bi_range if blocks[i] and blocks[i].get('TMP') is not None],
+                             key=lambda i: blocks[i].get('TMP', 999), default=None)
+            pb = blocks[tmp_bi] if tmp_bi is not None else None
+            threats['TEMPERATURE'].update({
+                "prob": round(card_p, 1), "risk": card_rk,
+                "risk_label": RISK_L[card_rk], "color": RISK_C[card_rk],
+                "level": card_l, "metric": METRICS.get(met_key, {}).get(card_l, ""),
+            })
+            if pb:
+                threats['TEMPERATURE'].update({
+                    "peak_start_fxx": pb["start_fxx"],
+                    "peak_end_fxx":   pb["end_fxx"],
+                    "peak_utc_start": pb["utc_start"],
+                })
 
     print(f"\n  threats.json + timeline.json written  [{cycle_label}]")
     print("\nActive threats:")
