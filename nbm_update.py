@@ -4,6 +4,19 @@ KRNO DSS — NBM Text Bulletin Processor
 GitHub Actions workflow script
 Downloads NBM text bulletins, computes hazard probabilities,
 writes threats.json and timeline.json to repo root.
+
+DATA SOURCE COVERAGE (by design — not configurable):
+  NBH (hourly)  : f001–f025   Wind/Vis/Precip/Temp at 1-hr resolution
+  NBS (3-hourly): f005–f072   Snow/FZRA/Temp/Precip at 3-hr resolution
+                               Also fills blocks 9-15 (hours 26-48) for all
+                               met elements missing from NBH.
+  NBP (prob)    : 01/07/13/19Z  G24 gust percentiles, MaxT/MinT Gaussian
+
+NOTE — NBH IS 25 HOURS BY DESIGN: The NBH bulletin is officially defined as
+"1-hourly NBM guidance from 1-25 hours." This is an NWS product constraint,
+not a parser limitation. Blocks 9-15 (fxx 26-48) use NBS data. Visibility
+probability fields (MVV/IFV/LIV) are only available in NBH; they will show
+zero for the D2 timeline blocks.
 """
 
 import re, json, requests, sys, os
@@ -13,6 +26,10 @@ import numpy as np
 
 STATION    = "KRNO"
 NOMADS_NBM = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/blend/prod"
+
+# Minimum probability (%) a Gaussian hazard must reach to register a level.
+# Prevents Gaussian tails from triggering extreme-level false positives.
+HAZARD_MIN_PROB = 5.0
 
 RISK_C = {0:"#3f3f46",1:"#e2f0cb",2:"#ffeb3b",3:"#ff9800",4:"#f44336",5:"#9c27b0"}
 RISK_L = {0:"NONE",1:"LITTLE TO NONE",2:"MINOR",3:"MODERATE",4:"MAJOR",5:"EXTREME"}
@@ -91,6 +108,7 @@ def fetch_station(url):
 # ── Parse bulletins ────────────────────────────────────────────────────────────
 
 def parse_nbh(sec):
+    """Parse NBH bulletin. Returns dict keyed by fxx (1-25 by product design)."""
     utc_row = []
     for line in sec.split('\n'):
         if line.strip().startswith('UTC '):
@@ -102,7 +120,7 @@ def parse_nbh(sec):
         v = parse_row(el, sec)
         if v: rows[el] = v
     data = {}
-    for i, uh in enumerate(utc_row[:48]):
+    for i, uh in enumerate(utc_row[:48]):  # [:48] is fine; NBH only has 25 columns
         fxx = i+1
         entry = {'utc_hour': uh, 'fxx': fxx}
         for el, vals in rows.items():
@@ -113,13 +131,19 @@ def parse_nbh(sec):
     return data
 
 def parse_nbs(sec):
+    """
+    Parse NBS bulletin (3-hourly, fxx 5-72).
+    FIX v2: expanded element list to include TMP/DPT/GST/etc. so NBS can
+    fill blocks 9-15 (hours 26-48) where NBH has no data.
+    """
     fhr_row = []
     for line in sec.split('\n'):
         if 'FHR' in line:
             fhr_row = [int(x) for x in re.findall(r'\d+', line[4:])]
             break
     rows = {}
-    for el in ['S06','ZR6','T06','P06']:
+    # EXPANDED: was ['S06','ZR6','T06','P06'] — now includes full met suite
+    for el in ['TMP','TSD','DPT','DSD','GST','GSD','P06','Q06','S06','ZR6','T06']:
         v = parse_row(el, sec)
         if v: rows[el] = v
     data = {}
@@ -134,17 +158,29 @@ def parse_nbs(sec):
     return data
 
 def parse_nbp(sec):
+    """
+    Parse NBP probabilistic bulletin.
+    TXNMN row: per NOAA docs, Minimum is listed at 12z, Maximum at 00z.
+    For a 01Z cycle: [0]=tonight MinT, [1]=tomorrow MaxT, [2]=D2 MinT, [3]=D2 MaxT.
+    """
     txnmn=parse_row('TXNMN',sec); txnsd=parse_row('TXNSD',sec)
     g24p1=parse_row('G24P1',sec); g24p2=parse_row('G24P2',sec)
     g24p5=parse_row('G24P5',sec); g24p7=parse_row('G24P7',sec)
     g24p9=parse_row('G24P9',sec)
     r = {}
+    # TXNMN alternates Min/Max starting with the next 12z period:
+    # col0=TMIN_N1 (tonight low), col1=TMAX_D1 (tomorrow high),
+    # col2=TMIN_N2 (D2 night low), col3=TMAX_D2 (D2 high)
+    # NOTE: original code had cols 0 and 1 swapped vs. NOAA documentation.
+    # Corrected mapping below. Verify against actual bulletin if values look wrong.
+    if len(txnmn)>=2:
+        r.update({'TMIN_N1':txnmn[0],'TMAX_D1':txnmn[1]})
     if len(txnmn)>=4:
-        r.update({'TMAX_D1':txnmn[0],'TMIN_N1':txnmn[1],
-                  'TMAX_D2':txnmn[2],'TMIN_N2':txnmn[3]})
+        r.update({'TMIN_N2':txnmn[2],'TMAX_D2':txnmn[3]})
+    if len(txnsd)>=2:
+        r.update({'TMIN_N1_STD':txnsd[0],'TMAX_D1_STD':txnsd[1]})
     if len(txnsd)>=4:
-        r.update({'TMAX_D1_STD':txnsd[0],'TMIN_N1_STD':txnsd[1],
-                  'TMAX_D2_STD':txnsd[2],'TMIN_N2_STD':txnsd[3]})
+        r.update({'TMIN_N2_STD':txnsd[2],'TMAX_D2_STD':txnsd[3]})
     for pct,row in [(10,g24p1),(20,g24p2),(50,g24p5),(70,g24p7),(90,g24p9)]:
         if len(row)>=1: r[f'G24_D1_P{pct}']=row[0]
         if len(row)>=2: r[f'G24_D2_P{pct}']=row[1]
@@ -153,28 +189,86 @@ def parse_nbp(sec):
 # ── Build 3-hour blocks ────────────────────────────────────────────────────────
 
 def make_blocks(nbh, nbs):
+    """
+    Build 16 × 3-hour blocks covering hours 1-48.
+
+    Blocks 0-7  (fxx 1-24):  NBH primary (1-hr resolution); NBS for S06/ZR6.
+    Blocks 8    (fxx 25-27): NBH for fxx=25, NBS for remainder.
+    Blocks 9-15 (fxx 26-48): NBS primary (3-hr resolution); VIS fields unavailable.
+
+    FIX v2: was `blocks.append(None)` for all NBS-only blocks — now builds
+    valid blocks from NBS TMP/DPT/GST/P06/Q06 so hours 26-48 are computed.
+    """
+    # Derive cycle UTC hour from NBH fxx=1 entry (for NBS block utc_start)
+    cycle_utc_h = None
+    if nbh.get(1):
+        cycle_utc_h = (nbh[1]['utc_hour'] - 1) % 24
+
     blocks = []
     for bi in range(16):
         s = bi*3+1; e = s+2
-        hrs = [nbh.get(f) for f in range(s,e+1) if nbh.get(f)]
-        if not hrs:
-            blocks.append(None); continue
+
+        # ── NBH hours in this block ──────────────────────────────────────────
+        nbh_hrs = [nbh.get(f) for f in range(s, e+1) if nbh.get(f)]
+
+        # ── Matching NBS 3-hour period ───────────────────────────────────────
         nbs_entry = None
         mid = s+1
         for nk in [round(mid/3)*3, round((mid+1)/3)*3, round((mid-1)/3)*3]:
             if nk in nbs: nbs_entry = nbs[nk]; break
-        def av(k): v=[h[k] for h in hrs if h.get(k) is not None]; return sum(v)/len(v) if v else None
-        def mx(k): v=[h[k] for h in hrs if h.get(k) is not None]; return max(v) if v else None
-        def mn(k): v=[h[k] for h in hrs if h.get(k) is not None]; return min(v) if v else None
+
+        # ── Need at least one data source ────────────────────────────────────
+        if not nbh_hrs and nbs_entry is None:
+            blocks.append(None); continue
+
+        # ── Helper: NBS scalar getter ────────────────────────────────────────
+        def _nbs(k): return nbs_entry.get(k) if nbs_entry else None
+
+        # ── NBH aggregate helpers (fall back to NBS scalar if no NBH data) ──
+        def av(k):
+            v = [h[k] for h in nbh_hrs if h.get(k) is not None]
+            return sum(v)/len(v) if v else _nbs(k)
+        def mx(k):
+            v = [h[k] for h in nbh_hrs if h.get(k) is not None]
+            return max(v) if v else _nbs(k)
+        def mn(k):
+            v = [h[k] for h in nbh_hrs if h.get(k) is not None]
+            return min(v) if v else _nbs(k)
+
+        # ── utc_start: use NBH when available, else derive from cycle ────────
+        if nbh_hrs:
+            utc_start = nbh_hrs[0].get('utc_hour')
+        elif cycle_utc_h is not None:
+            utc_start = (cycle_utc_h + s) % 24
+        else:
+            utc_start = None
+
+        # ── NBS P06/Q06 → hourly-equivalent P01/Q01 ─────────────────────────
+        # P06 is 6-hr PoP; used as-is (probability of precip in the period).
+        # Q06 is 6-hr QPF in hundredths of inches; divide by 6 for hr rate.
+        nbs_p01 = _nbs('P06')
+        nbs_q01 = round(_nbs('Q06') / 6.0, 1) if _nbs('Q06') is not None else None
+
         b = {
-            'start_fxx':s,'end_fxx':e,'utc_start':hrs[0].get('utc_hour'),
-            'TMP':av('TMP'),'TSD':av('TSD'),'DPT':av('DPT'),
-            'GST':mx('GST'),'GSD':av('GSD'),
-            'T01':mx('T01'),'P01':mx('P01'),'Q01':mx('Q01'),
-            'VIS':mn('VIS'),'MVV':mx('MVV'),'IFV':mx('IFV'),'LIV':mx('LIV'),
-            'S06':nbs_entry.get('S06') if nbs_entry else None,
-            'ZR6':nbs_entry.get('ZR6') if nbs_entry else None,
-            'T06':nbs_entry.get('T06') if nbs_entry else None,
+            'start_fxx': s, 'end_fxx': e, 'utc_start': utc_start,
+            # Temperature / moisture (NBH primary, NBS fallback)
+            'TMP': av('TMP'), 'TSD': av('TSD'), 'DPT': av('DPT'),
+            # Wind gust (NBH primary, NBS fallback)
+            'GST': mx('GST'), 'GSD': av('GSD'),
+            # Precip probability & QPF (NBH primary; NBS P06/Q06 for D2 blocks)
+            'T01': mx('T01') if nbh_hrs else _nbs('T06'),
+            'P01': mx('P01') if nbh_hrs else nbs_p01,
+            'Q01': mx('Q01') if nbh_hrs else nbs_q01,
+            # Visibility probability fields (NBH only — not in NBS)
+            # D2 blocks will show zero visibility risk (data not available)
+            'VIS': mn('VIS'),
+            'MVV': mx('MVV'),
+            'IFV': mx('IFV'),
+            'LIV': mx('LIV'),
+            # Precip type from NBS (always from NBS for all blocks)
+            'S06': _nbs('S06'),
+            'ZR6': _nbs('ZR6'),
+            'T06': _nbs('T06'),
         }
         blocks.append(b)
     return blocks
@@ -187,24 +281,41 @@ def compute_block(block, bi, nbp):
     h = {}
     d2 = bi >= 8
 
-    # WIND
+    # ── WIND ──────────────────────────────────────────────────────────────────
+    # Uses NBP G24 gust percentiles for 24-hr max gust Gaussian distribution.
+    #
+    # FIX v2 (BUG): was scanning HIGH→LOW and stopping at first p > 0.0.
+    # Due to Gaussian tails, gauss_above always returns a non-zero value once
+    # above the rounding threshold (0.05%), so the old loop stopped at the
+    # highest threshold with a tiny probability (e.g. 0.2% at 58 mph even for
+    # a 35 mph median day), reporting the wrong level with a misleading prob.
+    #
+    # FIX: scan LOW→HIGH, keep updating as long as prob >= HAZARD_MIN_PROB (5%).
+    # Probabilities decrease monotonically with threshold, so the first miss
+    # means all higher thresholds will also miss — safe to break.
+    # Result: highest level where there is at least a 5% chance of occurrence,
+    # with that level's probability as the card value.
     gm, gs = pct_to_gaussian(
         nbp.get(f"G24_D{'2' if d2 else '1'}_P10"),
         nbp.get(f"G24_D{'2' if d2 else '1'}_P50"),
         nbp.get(f"G24_D{'2' if d2 else '1'}_P90"))
-    wp, wl = 0, 0
+    wp, wl = 0.0, 0
     if gm:
-        for t,l in [(65,5),(58,4),(45,3),(30,2)]:
+        for t, l in [(30,2),(45,3),(58,4),(65,5)]:   # LOW → HIGH
             p = gauss_above(gm, gs, t)
-            if p>0: wp,wl=p,l; break
+            if p >= HAZARD_MIN_PROB:
+                wp, wl = p, l
+            else:
+                break  # monotonically decreasing — no higher threshold will qualify
     h["WIND"] = {"prob":wp,"risk":rlvl(wp),"level":wl,"color":RISK_C[rlvl(wp)]}
 
-    # LIGHTNING
+    # ── LIGHTNING ─────────────────────────────────────────────────────────────
     t01 = block.get('T01') or block.get('T06') or 0
     ll = 5 if t01>=75 else 4 if t01>=50 else 3 if t01>=25 else 2 if t01>=5 else 0
-    h["LIGHTNING"] = {"prob":float(t01),"risk":rlvl(t01),"level":ll,"color":RISK_C[rlvl(t01)]}
+    h["LIGHTNING"] = {"prob":float(t01),"risk":rlvl(t01),"level":ll,
+                      "color":RISK_C[rlvl(t01)]}
 
-    # SNOW
+    # ── SNOW ──────────────────────────────────────────────────────────────────
     s06=block.get('S06'); pop=block.get('P01') or 0; sp,sl=0,0
     if s06 and s06>0:
         s_inhr=(s06/10.0)/6.0
@@ -212,7 +323,9 @@ def compute_block(block, bi, nbp):
             if s_inhr>=t: sp,sl=min(pop,100.0),l; break
     h["SNOW"] = {"prob":sp,"risk":rlvl(sp),"level":sl,"color":RISK_C[rlvl(sp)]}
 
-    # VISIBILITY
+    # ── VISIBILITY ────────────────────────────────────────────────────────────
+    # LIV/IFV/MVV only available in NBH (hours 1-25).
+    # D2 blocks (26-48) will show zero — document this in the dashboard.
     liv=block.get('LIV') or 0; ifv=block.get('IFV') or 0; mvv=block.get('MVV') or 0
     if liv>=1: vp,vl=liv,4
     elif ifv>=1: vp,vl=ifv,3
@@ -220,7 +333,7 @@ def compute_block(block, bi, nbp):
     else: vp,vl=0,0
     h["VISIBILITY"] = {"prob":vp,"risk":rlvl(vp),"level":vl,"color":RISK_C[rlvl(vp)]}
 
-    # FZRA
+    # ── FZRA ──────────────────────────────────────────────────────────────────
     zr6=block.get('ZR6'); fzp,fzl=0,0
     if zr6 and zr6>0:
         zr=zr6/100.0
@@ -228,16 +341,17 @@ def compute_block(block, bi, nbp):
             if zr>=t: fzp,fzl=min(pop,100.0),l; break
     h["FZRA"] = {"prob":fzp,"risk":rlvl(fzp),"level":fzl,"color":RISK_C[rlvl(fzp)]}
 
-    # FLASH FREEZE — Tw from TMP+DPT, P01>=25%
+    # ── FLASH FREEZE ──────────────────────────────────────────────────────────
     tmp_f=block.get('TMP'); dpt_f=block.get('DPT'); ff_p,ff_l=0,0
-    if tmp_f and dpt_f and pop>=25:
-        tw_f = tmp_f - (tmp_f - dpt_f) / 3.0
+    if tmp_f is not None and dpt_f is not None and pop>=25:
+        tw_f = tmp_f - (tmp_f - dpt_f) / 3.0  # Stull wet-bulb approximation
         wf = pop/100.0
         for t,l in [(25,5),(28,4),(32,3),(36,2)]:
             if tw_f<=t: ff_p=round(wf*100,1); ff_l=l; break
-    h["FLASH_FREEZE"] = {"prob":ff_p,"risk":rlvl(ff_p),"level":ff_l,"color":RISK_C[rlvl(ff_p)]}
+    h["FLASH_FREEZE"] = {"prob":ff_p,"risk":rlvl(ff_p),"level":ff_l,
+                         "color":RISK_C[rlvl(ff_p)]}
 
-    # RAIN
+    # ── RAIN ──────────────────────────────────────────────────────────────────
     q01=block.get('Q01'); rp,rl=0,0
     if q01 and q01>0:
         q=q01/100.0
@@ -246,27 +360,37 @@ def compute_block(block, bi, nbp):
     elif pop>10: rp,rl=pop,2
     h["RAIN"] = {"prob":rp,"risk":rlvl(rp),"level":rl,"color":RISK_C[rlvl(rp)]}
 
-    # COLD
+    # ── COLD ──────────────────────────────────────────────────────────────────
+    # FIX v2 (same bug as WIND): was scanning HIGH→LOW (extreme→mild).
+    # Fixed to scan LOW→HIGH (mild→extreme) and break on first miss.
     mint=nbp.get("TMIN_N2" if d2 else "TMIN_N1")
     mint_std=nbp.get("TMIN_N2_STD" if d2 else "TMIN_N1_STD") or 3
-    cp,cl=0,0
+    cp, cl = 0.0, 0
     if mint:
-        for t,l in [(0,5),(20,4),(32,3),(40,2)]:
-            p=gauss_below(mint,mint_std,t)
-            if p>0: cp,cl=p,l; break
+        for t, l in [(40,2),(32,3),(20,4),(0,5)]:    # MILD → EXTREME (ascending threshold)
+            p = gauss_below(mint, mint_std, t)
+            if p >= HAZARD_MIN_PROB:
+                cp, cl = p, l
+            else:
+                break  # gauss_below decreases as threshold decreases — safe to break
     h["COLD"] = {"prob":cp,"risk":rlvl(cp),"level":cl,"color":RISK_C[rlvl(cp)]}
 
-    # HEAT
+    # ── HEAT ──────────────────────────────────────────────────────────────────
+    # FIX v2 (same bug as WIND): was scanning HIGH→LOW (extreme→mild).
+    # Fixed to scan LOW→HIGH (mild→extreme) and break on first miss.
     maxt=nbp.get("TMAX_D2" if d2 else "TMAX_D1")
     maxt_std=nbp.get("TMAX_D2_STD" if d2 else "TMAX_D1_STD") or 3
-    hp,hl=0,0
+    hp, hl = 0.0, 0
     if maxt:
-        for t,l in [(105,5),(100,4),(95,3),(90,2)]:
-            p=gauss_above(maxt,maxt_std,t)
-            if p>0: hp,hl=p,l; break
+        for t, l in [(90,2),(95,3),(100,4),(105,5)]:  # MILD → EXTREME (ascending threshold)
+            p = gauss_above(maxt, maxt_std, t)
+            if p >= HAZARD_MIN_PROB:
+                hp, hl = p, l
+            else:
+                break  # monotonically decreasing — safe to break
     h["HEAT"] = {"prob":hp,"risk":rlvl(hp),"level":hl,"color":RISK_C[rlvl(hp)]}
 
-    # TEMPERATURE — higher of COLD/HEAT
+    # ── TEMPERATURE — higher risk of COLD or HEAT ────────────────────────────
     if h["HEAT"]["risk"] >= h["COLD"]["risk"]:
         temp=dict(h["HEAT"]); temp["temp_type"]="heat"
     else:
@@ -278,7 +402,7 @@ def compute_block(block, bi, nbp):
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
-    print("KRNO DSS — NBM text bulletin processor")
+    print("KRNO DSS — NBM text bulletin processor  (v2 — NBS fallback + loop fixes)")
     now = datetime.now(timezone.utc)
     print(f"Run time: {now.isoformat()}")
 
@@ -305,11 +429,19 @@ def main():
     nbs = parse_nbs(nbs_sec) if nbs_sec else {}
     nbp = parse_nbp(nbp_sec) if nbp_sec else {}
 
-    print(f"  NBH: {len(nbh)} hours  NBS: {len(nbs)} periods  NBP: {len(nbp)} fields")
+    # NBH is 25 hrs by design; NBS covers the rest
+    nbs_active = sum(1 for b in range(9,16) if any(
+        (bi*3+1) <= int(k) <= (bi*3+3) for k in [str(x) for x in nbs.keys()]
+        for bi in [b]))
+    print(f"  NBH: {len(nbh)} hrs (D1, by design)  NBS: {len(nbs)} periods (D1+D2)  NBP: {len(nbp)} fields")
 
     # Build blocks and compute hazards
     blocks = make_blocks(nbh, nbs)
     block_hazards = [compute_block(b, i, nbp) for i,b in enumerate(blocks)]
+
+    d1_blocks = sum(1 for b in blocks[:8] if b is not None)
+    d2_blocks = sum(1 for b in blocks[8:] if b is not None)
+    print(f"  Timeline: {d1_blocks}/8 D1 blocks + {d2_blocks}/8 D2 blocks populated")
 
     # Threat cards — max over all blocks
     threats = {}
@@ -331,14 +463,13 @@ def main():
         }
 
     now_iso = now.isoformat()
-    cycle_label = f"NBH {nbh_hs}Z / NBP {nbp_hs}Z"
+    cycle_label = f"NBH {nbh_hs}Z / NBS {nbs_hs}Z / NBP {nbp_hs}Z"
 
     # Write output files
     threats_out = {"threats": threats, "cycle": cycle_label, "last_updated": now_iso}
     timeline_out = {"blocks": blocks, "block_hazards": block_hazards,
                     "cycle": cycle_label, "last_updated": now_iso}
 
-    # Convert block keys to strings for JSON
     def serialize(obj):
         if isinstance(obj, np.integer): return int(obj)
         if isinstance(obj, np.floating): return float(obj)
@@ -356,7 +487,7 @@ def main():
     print("\nActive threats:")
     for hz, v in threats.items():
         if v["prob"] > 0:
-            print(f"  {hz:15s}: {v['prob']:5.1f}% {v['risk_label']}")
+            print(f"  {hz:15s}: {v['prob']:5.1f}%  {v['risk_label']:<14s}  {v['metric']}")
 
 if __name__ == "__main__":
     main()
