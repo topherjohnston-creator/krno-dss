@@ -315,16 +315,16 @@
     </div>
 
     <script>
-        // --- BACKEND URL (auto-loaded from config.json, updated by Colab Cell 6b) ---
-                // Static JSON — no backend needed
+        // Config loaded from config.json
+        // Config loaded from config.json (Synoptic token etc)
         let _config = {};
         async function loadConfig() {
             try {
                 const r = await fetch('./config.json?t=' + Date.now());
                 _config = await r.json();
-                // Static JSON — no backend needed
-                // Static JSON — no backend needed
+            } catch(e) { console.warn('config.json load failed:', e); }
         }
+
 
         const TOTAL_HOURS = 48; 
         let globalNow = new Date(); 
@@ -1249,24 +1249,17 @@
                 if (threatsResp.status === 'fulfilled' && threatsResp.value.threats) {
                     refsThreats = threatsResp.value.threats;
                     document.getElementById('refs-status')?.remove();
-                    // Parse cycle start time e.g. "2026-05-10 18Z"
                     const cycleStr = threatsResp.value.cycle || '';
                     const cm = cycleStr.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2})Z/);
                     if (cm) cycleStartTime = Date.UTC(+cm[1], +cm[2]-1, +cm[3], +cm[4], 0, 0);
-                // Static JSON — no backend needed
-                    // No backend configured — show status in threat matrix
-                    const tmPanel = document.querySelector('#threat-matrix-container') || document.querySelector('.panel');
-                    if (tmPanel && !document.getElementById('refs-status')) {
-                        const msg = document.createElement('div');
-                        msg.id = 'refs-status';
-                        msg.style.cssText = 'position:absolute;bottom:8px;left:12px;font-size:10px;color:#71717a;font-family:monospace;z-index:50;';
-                        msg.textContent = 'REFS: No backend configured — run Colab notebook';
-                        tmPanel.style.position = 'relative';
-                        tmPanel.appendChild(msg);
-                    }
                 }
-                if (timelineResp.status === 'fulfilled' && timelineResp.value.timeline) {
-                    refsTimeline = timelineResp.value.timeline;
+
+                // NBM blocks from timeline.json
+                let nbmBlocks = null;
+                let nbmBlockHazards = null;
+                if (timelineResp.status === 'fulfilled' && timelineResp.value.blocks) {
+                    nbmBlocks       = timelineResp.value.blocks;
+                    nbmBlockHazards = timelineResp.value.block_hazards;
                 }
 
                 if (!liveMetar) {
