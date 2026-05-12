@@ -33,5 +33,7 @@ jobs:
           git add threats.json timeline.json
           # Only commit if something changed
           git diff --staged --quiet || git commit -m "Auto-update NBM hazard data $(date -u '+%Y-%m-%d %H:%MZ')"
-          git pull --rebase origin main
+          # Pull remote changes and auto-resolve any conflicts with our version.
+          # -X ours: when concurrent runs both update the JSON, keep this run's output.
+          git pull --rebase -X ours origin main
           git push
