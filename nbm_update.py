@@ -416,9 +416,9 @@ def main():
     print(f"Run time: {now.isoformat()}")
 
     print("\nFetching NBM bulletins...")
-    _, nbh_hs, nbh_url = get_cycle('h')
-    _, nbs_hs, nbs_url = get_cycle('s')
-    _, nbp_hs, nbp_url = get_cycle('p')
+    nbh_ds, nbh_hs, nbh_url = get_cycle('h')
+    _,       nbs_hs, nbs_url = get_cycle('s')
+    _,       nbp_hs, nbp_url = get_cycle('p')
     print(f"  NBH: {nbh_hs}Z  NBS: {nbs_hs}Z  NBP: {nbp_hs}Z")
 
     nbh_sec = fetch_station(nbh_url) if nbh_url else None
@@ -496,8 +496,14 @@ def main():
         if isinstance(obj, np.ndarray): return obj.tolist()
         raise TypeError(f"Not serializable: {type(obj)}")
 
+    # ISO timestamp of NBH cycle start — frontend uses this to compute correct peak times
+    # peak_start_fxx is hours from cycle start, not from "now"
+    cycle_utc_iso = (f"{nbh_ds[:4]}-{nbh_ds[4:6]}-{nbh_ds[6:8]}T{nbh_hs}:00:00Z"
+                     if nbh_ds and nbh_hs else None)
+
     with open('threats.json', 'w') as f:
-        json.dump({"threats": threats, "cycle": cycle_label, "last_updated": now_iso},
+        json.dump({"threats": threats, "cycle": cycle_label,
+                   "cycle_utc_iso": cycle_utc_iso, "last_updated": now_iso},
                   f, default=serialize)
     with open('timeline.json', 'w') as f:
         json.dump({"blocks": blocks, "block_hazards": block_hazards,
