@@ -121,7 +121,7 @@ def parse_nbh(sec):
             utc_row = [int(x) for x in re.findall(r'\d+', line[4:])]
             break
     rows = {}
-    for el in ['TMP','TSD','DPT','DSD','GST','GSD','P01','Q01','T01','VIS','MVV','IFV','LIV']:
+    for el in ['TMP','TSD','DPT','DSD','WDR','WSP','GST','GSD','P01','Q01','T01','VIS','MVV','IFV','LIV']:
         v = parse_row(el, sec)
         if v: rows[el] = v
     data = {}
@@ -143,7 +143,7 @@ def parse_nbs(sec):
             fhr_row = [int(x) for x in re.findall(r'\d+', line[4:])]
             break
     rows = {}
-    for el in ['TMP','TSD','DPT','DSD','GST','GSD','P06','Q06','S06','ZR6','T06']:
+    for el in ['TMP','TSD','DPT','DSD','WDR','WSP','GST','GSD','P06','Q06','S06','ZR6','T06']:
         v = parse_row(el, sec)
         if v: rows[el] = v
     data = {}
@@ -270,6 +270,7 @@ def make_blocks(nbh, nbs):
         b = {
             'start_fxx': s, 'end_fxx': e, 'utc_start': utc_start,
             'TMP': av('TMP'), 'TSD': av('TSD'), 'DPT': av('DPT'),
+            'WDR': mx('WDR'), 'WSP': mx('WSP'),  # wind dir (tens of deg) & speed (mph)
             'GST': mx('GST'), 'GSD': av('GSD'),
             'T01': mx('T01') if nbh_hrs else _nbs('T06'),
             'P01': mx('P01') if nbh_hrs else nbs_p01,
