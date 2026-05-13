@@ -518,7 +518,9 @@ def main():
                 "prob": best_p, "risk": best_rk, "risk_label": RISK_L[best_rk],
                 "color": RISK_C[best_rk], "level": best_l,
                 "metric": METRICS["WIND"].get(best_l, ""),
-                "g24_d1_p50_mph": g24p5  # For reference in frontend
+                "g24_p10_mph": nbp.get('G24_D1_P1'),
+                "g24_p50_mph": nbp.get('G24_D1_P5'),
+                "g24_p90_mph": nbp.get('G24_D1_P9')
             })
             # Find the block containing the actual peak gust hour (highest GST in NBH)
             peak_gust_hour = 1
