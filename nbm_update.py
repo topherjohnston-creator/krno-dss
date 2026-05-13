@@ -261,14 +261,16 @@ def _pack(prob, level, extra=None):
     return out
 
 
-def compute_block(block, bi, nbp, prev_block=None, is_peak_gust_block=False):
+def compute_block(block, bi, nbp, prev_block=None, is_peak_gust_block=False, is_peak_max_block=False, is_peak_min_block=False):
     """
     Per-block hazard computation.
 
     `prev_block` is the 3-hr block immediately before this one (or None for bi=0).
     It is used only by FLASH_FREEZE to detect "was wet, now freezing" sequences.
     
-    `is_peak_gust_block`: If True, use 24h P90 gust for wind calculation instead of block mean.
+    `is_peak_gust_block`: If True, use 24h P90 gust for wind calculation.
+    `is_peak_max_block`: If True, use 24h P90 temp for heat calculation.
+    `is_peak_min_block`: If True, use 24h P1 temp for cold calculation.
     """
     if not block:
         return {hz: _pack(0, 0) for hz in HAZARDS + ["COLD","HEAT"]}
@@ -427,12 +429,13 @@ def compute_block(block, bi, nbp, prev_block=None, is_peak_gust_block=False):
     # Use 24h values for peak blocks
     cold_tmp = tmp
     heat_tmp = tmp
-    if is_peak_gust_block and nbp:
-        # For cold: find the block with lowest temp, use P1 (lowest percentile)
+    if is_peak_min_block and nbp:
+        # For cold: use P1 (lowest percentile)
         tmin_p1 = nbp.get('TMIN_D1_P1')
         if tmin_p1 is not None:
             cold_tmp = tmin_p1
-        # For heat: find the block with highest temp, use P90 (highest percentile)
+    if is_peak_max_block and nbp:
+        # For heat: use P90 (highest percentile)
         tmax_p90 = nbp.get('TMAX_D1_P9')
         if tmax_p90 is not None:
             heat_tmp = tmax_p90
@@ -498,11 +501,19 @@ def main():
     peak_max_block_idx = (peak_max_hour - 1) // 3
     peak_min_block_idx = (peak_min_hour - 1) // 3
     
+    print(f"DEBUG: peak_gust_hour={peak_gust_hour} (block {peak_gust_block_idx}), val={peak_gust_val}", file=sys.stderr)
+    print(f"DEBUG: peak_max_hour={peak_max_hour} (block {peak_max_block_idx}), val={peak_max_val}", file=sys.stderr)
+    print(f"DEBUG: peak_min_hour={peak_min_hour} (block {peak_min_block_idx}), val={peak_min_val}", file=sys.stderr)
+    print(f"DEBUG: G24_D1_P9={nbp.get('G24_D1_P9')}, TMAX_D1_P9={nbp.get('TMAX_D1_P9')}, TMIN_D1_P1={nbp.get('TMIN_D1_P1')}", file=sys.stderr)
+    
     # Compute block hazards with peak flags
     block_hazards = []
     for i, b in enumerate(blocks):
         is_peak_gust = (i == peak_gust_block_idx)
-        block_hazards.append(compute_block(b, i, nbp, prev_block=blocks[i-1] if i > 0 else None, is_peak_gust_block=is_peak_gust))
+        is_peak_max = (i == peak_max_block_idx)
+        is_peak_min = (i == peak_min_block_idx)
+        block_hazards.append(compute_block(b, i, nbp, prev_block=blocks[i-1] if i > 0 else None, 
+                                          is_peak_gust_block=is_peak_gust, is_peak_max_block=is_peak_max, is_peak_min_block=is_peak_min))
     threats = {}
     for hz in HAZARDS:
         idx = [i for i in range(len(blocks)) if blocks[i]]
