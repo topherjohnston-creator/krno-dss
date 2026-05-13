@@ -504,7 +504,7 @@ def main():
     # Use NBP's G24P5 (24-hour gust percentile) instead of 3-hour block average,
     # since it's more accurate and matches operational briefing data. The peak
     # timing still comes from the hourly block (when the peak gust occurs).
-    g24p5 = nbp.get('G24_D1_P50')  # 24h median gust in mph
+    g24p5 = nbp.get('G24_D1_P5')  # 24h median gust in mph
     if g24p5 is not None:
         g24_std = 3  # assume modest std for percentile forecast
         best_p, best_l, best_rk = 0.0, 0, 0
@@ -537,8 +537,8 @@ def main():
     # threat matrix, since they're more accurate. The peak timing still comes
     # from the hourly block (when it actually occurs during the day).
     # Only show if risk >= 2 (MINOR or higher), not LITTLE-TO-NONE (risk=1).
-    tmax_d1 = nbp.get('TMAX_D1_P50')
-    tmin_d1 = nbp.get('TMIN_D1_P50')
+    tmax_d1 = nbp.get('TMAX_D1_P5')
+    tmin_d1 = nbp.get('TMIN_D1_P5')
     if tmax_d1 is not None or tmin_d1 is not None:
         # Compute heat hazard from tmax_d1
         if tmax_d1 is not None:
