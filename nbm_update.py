@@ -55,15 +55,94 @@ METRICS = {
     "COLD":        {2:"32-40F",       3:"20-32F",       4:"10-20F",      5:"<10F"},
 }
 
+def pct_above_from_percentiles(p1, p5, p7, p9, threshold):
+    """
+    Compute P(X > threshold) using percentile-based linear interpolation (DESI method).
+    Given empirical percentiles P1, P5, P7, P9 (1st, 5th, 7th, 90th), interpolate
+    to estimate the probability that X exceeds the threshold.
+    Returns probability as a percentage (0-100).
+    """
+    if p5 is None or p9 is None:
+        return 0.0
+    
+    # Build interpolation points: (value, cumulative_prob%)
+    points = [(p1, 1), (p5, 5), (p7, 7), (p9, 90)]
+    points = [(v, pct) for v, pct in points if v is not None]
+    
+    if not points or len(points) < 2:
+        return 0.0
+    
+    # Extrapolate high and low tails
+    x_vals = [p[0] for p in points]
+    y_vals = [p[1] for p in points]
+    
+    min_x, max_x = min(x_vals), max(x_vals)
+    
+    # If threshold is below all percentiles, assume ~0.1%
+    if threshold < min_x:
+        return 0.1
+    # If threshold is above all percentiles, assume ~99.9%
+    if threshold > max_x:
+        return 99.9
+    
+    # Linear interpolation between percentile points
+    for i in range(len(x_vals) - 1):
+        if x_vals[i] <= threshold <= x_vals[i+1]:
+            # Interpolate
+            x0, x1 = x_vals[i], x_vals[i+1]
+            y0, y1 = y_vals[i], y_vals[i+1]
+            prob = y0 + (threshold - x0) * (y1 - y0) / (x1 - x0)
+            # P(X > threshold) = 100 - P(X <= threshold)
+            return round(max(0.0, 100.0 - prob), 1)
+    
+    return 0.0
+
+def pct_below_from_percentiles(p1, p5, p7, p9, threshold):
+    """
+    Compute P(X < threshold) using percentile-based linear interpolation.
+    Returns probability as a percentage (0-100).
+    """
+    if p5 is None or p9 is None:
+        return 0.0
+    
+    # Build interpolation points
+    points = [(p1, 1), (p5, 5), (p7, 7), (p9, 90)]
+    points = [(v, pct) for v, pct in points if v is not None]
+    
+    if not points or len(points) < 2:
+        return 0.0
+    
+    x_vals = [p[0] for p in points]
+    y_vals = [p[1] for p in points]
+    
+    min_x, max_x = min(x_vals), max(x_vals)
+    
+    if threshold < min_x:
+        return 0.1
+    if threshold > max_x:
+        return 99.9
+    
+    for i in range(len(x_vals) - 1):
+        if x_vals[i] <= threshold <= x_vals[i+1]:
+            x0, x1 = x_vals[i], x_vals[i+1]
+            y0, y1 = y_vals[i], y_vals[i+1]
+            prob = y0 + (threshold - x0) * (y1 - y0) / (x1 - x0)
+            return round(max(0.0, prob), 1)
+    
+    return 0.0
+
 def gauss_above(mean, std, thr):
+    """Legacy Gaussian method (fallback when percentiles unavailable)"""
     if mean is None: return 0.0
     return round(float((1 - norm.cdf(thr, mean, max(std or 0.1, 0.1))) * 100), 1)
 
 def gauss_below(mean, std, thr):
+    """Legacy Gaussian method (fallback when percentiles unavailable)"""
     if mean is None: return 0.0
     return round(float(norm.cdf(thr, mean, max(std or 0.1, 0.1)) * 100), 1)
 
 def pct_to_gaussian(p10, p50, p90):
+    """Legacy method to extract mean/std from percentiles"""
     if p50 is None: return None, None
     std = (p90 - p50) / 1.28 if (p90 and p90 > p50) else (p50 - p10) / 1.28 if (p10 and p50 > p10) else 3.0
     return p50, max(std, 0.5)
@@ -175,18 +254,30 @@ def parse_nbh(sec):
 def parse_nbp(sec):
     n_cols, _utc = _utc_col_count(sec)
     r = {}
+    # Extract all percentile rows for gust (G24) and temperature (TXN)
     g24p1 = parse_row('G24P1', sec, n_cols=n_cols)
     g24p5 = parse_row('G24P5', sec, n_cols=n_cols)
+    g24p7 = parse_row('G24P7', sec, n_cols=n_cols)
     g24p9 = parse_row('G24P9', sec, n_cols=n_cols)
     txnp1 = parse_row('TXNP1', sec, n_cols=n_cols)
     txnp5 = parse_row('TXNP5', sec, n_cols=n_cols)
+    txnp7 = parse_row('TXNP7', sec, n_cols=n_cols)
     txnp9 = parse_row('TXNP9', sec, n_cols=n_cols)
+    
+    # Temperature: extract percentiles for D1 (today's) max/min
     if len(txnp5) >= 2 and txnp5[0] is not None:
-        r.update({'TMAX_D1_P10': txnp1[0], 'TMAX_D1_P50': txnp5[0],
-                  'TMAX_D1_P90': txnp9[0], 'TMIN_D1_P50': txnp5[1]})
-    for pct, row in [(10, g24p1), (50, g24p5), (90, g24p9)]:
+        r.update({
+            'TMAX_D1_P1': txnp1[0], 'TMAX_D1_P5': txnp5[0],
+            'TMAX_D1_P7': txnp7[0], 'TMAX_D1_P9': txnp9[0],
+            'TMIN_D1_P1': txnp1[1], 'TMIN_D1_P5': txnp5[1],
+            'TMIN_D1_P7': txnp7[1], 'TMIN_D1_P9': txnp9[1],
+        })
+    
+    # Wind gust: convert to mph and store all percentiles
+    for pct, row in [(1, g24p1), (5, g24p5), (7, g24p7), (9, g24p9)]:
         if row and row[0] is not None:
             r[f'G24_D1_P{pct}'] = round(row[0] * KT_TO_MPH, 1)
+    
     return r
 
 def make_blocks(nbh, nbs):
@@ -525,16 +616,18 @@ def main():
                     "txn_24h_min": tmin_d1
                 })
 
-    # ───── WIND OVERRIDE WITH 24H GUST PERCENTILE ──────────────────────────
-    # Use NBP's G24P5 (24-hour gust percentile) instead of 3-hour block average,
-    # since it's more accurate and matches operational briefing data. The peak
-    # timing still comes from the hourly block (when the peak gust occurs).
-    g24p5 = nbp.get('G24_D1_P50')  # 24h median gust in mph
+    # ───── WIND OVERRIDE WITH 24H GUST PERCENTILE (DESI METHOD) ────────────
+    # Use NBP's G24 percentiles (P1, P5, P7, P9) to compute probabilities via
+    # percentile-based interpolation (DESI method), not Gaussian. More accurate
+    # for non-normal distributions like wind gusts.
+    g24p1 = nbp.get('G24_D1_P1')
+    g24p5 = nbp.get('G24_D1_P5')
+    g24p7 = nbp.get('G24_D1_P7')
+    g24p9 = nbp.get('G24_D1_P9')
     if g24p5 is not None:
-        g24_std = 3  # assume modest std for percentile forecast
         best_p, best_l, best_rk = 0.0, 0, 0
         for thr, lvl in [(65, 5), (58, 4), (45, 3), (30, 2)]:
-            p = gauss_above(g24p5, g24_std, thr)
+            p = pct_above_from_percentiles(g24p1, g24p5, g24p7, g24p9, thr)
             rk = risk_matrix(p, lvl)
             if rk > best_rk or (rk == best_rk and p > best_p):
                 best_p, best_l, best_rk = p, lvl, rk
@@ -551,8 +644,53 @@ def main():
                                        block_hazards[i]['WIND']['prob']))
             block_hazards[pk_wind]['WIND'] = threats['WIND'].copy()
 
-    # Also apply temperature overrides to peak blocks for timeline visibility
-    if tmax_d1 is not None or tmin_d1 is not None:
+    # ───── TEMPERATURE OVERRIDE WITH 24H MAX/MIN (DESI METHOD) ──────────────
+    # Use NBP's TXNP percentiles (P1, P5, P7, P9) to compute probabilities via
+    # percentile-based interpolation, not Gaussian. The peak timing comes from
+    # hourly blocks.
+    tmax_p1 = nbp.get('TMAX_D1_P1')
+    tmax_p5 = nbp.get('TMAX_D1_P5')
+    tmax_p7 = nbp.get('TMAX_D1_P7')
+    tmax_p9 = nbp.get('TMAX_D1_P9')
+    tmin_p1 = nbp.get('TMIN_D1_P1')
+    tmin_p5 = nbp.get('TMIN_D1_P5')
+    tmin_p7 = nbp.get('TMIN_D1_P7')
+    tmin_p9 = nbp.get('TMIN_D1_P9')
+    
+    if tmax_p5 is not None or tmin_p5 is not None:
+        # Compute heat hazard from tmax percentiles
+        if tmax_p5 is not None:
+            hp, hl, h_rk = 0, 0, 0
+            for thr, lvl in [(90, 2), (95, 3), (100, 4), (105, 5)]:
+                p = pct_above_from_percentiles(tmax_p1, tmax_p5, tmax_p7, tmax_p9, thr)
+                rk = risk_matrix(p, lvl)
+                if rk > h_rk or (rk == h_rk and p > hp):
+                    hp, hl, h_rk = p, lvl, rk
+            if h_rk >= 2:  # Only override if MINOR or higher heat risk
+                threats['TEMPERATURE'].update({
+                    "prob": hp, "risk": h_rk, "risk_label": RISK_L[h_rk],
+                    "color": RISK_C[h_rk], "level": hl,
+                    "metric": METRICS["HEAT"].get(hl, ""),
+                    "temp_type": "heat",
+                    "txn_24h_max": tmax_p5
+                })
+        # Compute cold hazard from tmin percentiles
+        if tmin_p5 is not None:
+            cp, cl, c_rk = 0, 0, 0
+            for thr, lvl in [(40, 2), (32, 3), (20, 4), (10, 5)]:
+                p = pct_below_from_percentiles(tmin_p1, tmin_p5, tmin_p7, tmin_p9, thr)
+                rk = risk_matrix(p, lvl)
+                if rk > c_rk or (rk == c_rk and p > cp):
+                    cp, cl, c_rk = p, lvl, rk
+            if c_rk >= 2:  # Only override if MINOR or higher cold risk
+                threats['TEMPERATURE'].update({
+                    "prob": cp, "risk": c_rk, "risk_label": RISK_L[c_rk],
+                    "color": RISK_C[c_rk], "level": cl,
+                    "metric": METRICS["COLD"].get(cl, ""),
+                    "temp_type": "cold",
+                    "txn_24h_min": tmin_p5
+                })
+        # Update peak block in timeline
         try:
             pk_temp = max([i for i in range(len(blocks)) if blocks[i]], 
                          key=lambda i: (block_hazards[i]['TEMPERATURE']['risk'], 
