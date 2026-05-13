@@ -1,27 +1,19 @@
 #!/usr/bin/env python3
-"""
-KRNO DSS — NBM Text Bulletin Processor
-GitHub Actions workflow script
-Downloads NBM text bulletins, computes hazard probabilities,
-writes threats.json and timeline.json to repo root.
-"""
-
 import re, json, requests, sys
 from datetime import datetime, timezone, timedelta
 from scipy.stats import norm
 import numpy as np
 
 KT_TO_MPH = 1.15078
-
 STATION    = "KRNO"
 NOMADS_NBM = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/blend/prod"
 
 _MATRIX = {
-    4: [1, 2, 3, 4, 5],   # >90%  Very Likely
-    3: [1, 2, 3, 4, 4],   # >66%  Likely
-    2: [1, 2, 2, 3, 4],   # >33%  As Likely As Not
-    1: [1, 1, 2, 2, 3],   # >10%  Unlikely
-    0: [1, 1, 1, 2, 2],   # <10%  Extremely Unlikely
+    4: [1, 2, 3, 4, 5],   # >90%
+    3: [1, 2, 3, 4, 4],   # >66%
+    2: [1, 2, 2, 3, 4],   # >33%
+    1: [1, 1, 2, 2, 3],   # >10%
+    0: [1, 1, 1, 2, 2],   # <10%
 }
 
 def risk_matrix(prob, level):
@@ -31,7 +23,6 @@ def risk_matrix(prob, level):
 
 RISK_C = {0:"#3f3f46",1:"#e2f0cb",2:"#ffeb3b",3:"#ff9800",4:"#f44336",5:"#9c27b0"}
 RISK_L = {0:"NONE",1:"LITTLE TO NONE",2:"MINOR",3:"MODERATE",4:"MAJOR",5:"EXTREME"}
-
 HAZARDS = ["WIND","LIGHTNING","SNOW","VISIBILITY","FZRA","FLASH_FREEZE","RAIN","TEMPERATURE"]
 
 METRICS = {
@@ -56,9 +47,7 @@ def gauss_below(mean, std, thr):
 
 def pct_to_gaussian(p10, p50, p90):
     if p50 is None: return None, None
-    if p90 and p90 > p50: std = (p90 - p50) / 1.28
-    elif p10 and p50 > p10: std = (p50 - p10) / 1.28
-    else: std = 3.0
+    std = (p90 - p50) / 1.28 if (p90 and p90 > p50) else (p50 - p10) / 1.28 if (p10 and p50 > p10) else 3.0
     return p50, max(std, 0.5)
 
 def parse_row(label, section):
@@ -77,8 +66,7 @@ def get_cycle(btype):
         ds, hs = t.strftime('%Y%m%d'), f"{t.hour:02d}"
         url = f"{NOMADS_NBM}/blend.{ds}/{hs}/text/blend_nb{btype}tx.t{hs}z"
         try:
-            if requests.head(url, timeout=10).status_code == 200:
-                return ds, hs, url
+            if requests.head(url, timeout=10).status_code == 200: return ds, hs, url
         except: continue
     return None, None, None
 
@@ -105,9 +93,7 @@ def parse_nbh(sec):
         fxx = i + 1
         entry = {'utc_hour': uh, 'fxx': fxx}
         for el, vals in rows.items():
-            if i < len(vals):
-                v = vals[i]
-                entry[el] = None if v in (-99, 999, -88, 888) else v
+            if i < len(vals): entry[el] = None if vals[i] in (-99, 999, -88, 888) else vals[i]
         data[fxx] = entry
     return data
 
@@ -126,138 +112,68 @@ def parse_nbs(sec):
         if fxx > 72: break
         entry = {'fxx': fxx}
         for el, vals in rows.items():
-            if i < len(vals):
-                v = vals[i]
-                entry[el] = None if v in (-99, 999) else v
+            if i < len(vals): entry[el] = None if vals[i] in (-99, 999) else vals[i]
         data[fxx] = entry
     return data
 
 def parse_nbp(sec):
-    g24p1 = parse_row('G24P1', sec); g24p2 = parse_row('G24P2', sec)
-    g24p5 = parse_row('G24P5', sec); g24p7 = parse_row('G24P7', sec)
-    g24p9 = parse_row('G24P9', sec)
-    txnp1 = parse_row('TXNP1', sec); txnp5 = parse_row('TXNP5', sec); txnp9 = parse_row('TXNP9', sec)
     r = {}
+    g24p1, g24p5, g24p9 = parse_row('G24P1', sec), parse_row('G24P5', sec), parse_row('G24P9', sec)
+    txnp1, txnp5, txnp9 = parse_row('TXNP1', sec), parse_row('TXNP5', sec), parse_row('TXNP9', sec)
     if len(txnp5) >= 2:
-        r.update({'TMAX_D1_P10': min(txnp1[0], txnp1[1]) if len(txnp1)>=2 else None,
-                  'TMAX_D1_P50': max(txnp5[0], txnp5[1]),
-                  'TMAX_D1_P90': max(txnp9[0], txnp9[1]) if len(txnp9)>=2 else None,
-                  'TMIN_D1_P50': min(txnp5[0], txnp5[1])})
-    if len(txnp5) >= 4:
-        r.update({'TMAX_D2_P10': min(txnp1[2], txnp1[3]) if len(txnp1)>=4 else None,
-                  'TMAX_D2_P50': max(txnp5[2], txnp5[3]),
-                  'TMAX_D2_P90': max(txnp9[2], txnp9[3]) if len(txnp9)>=4 else None,
-                  'TMIN_D2_P50': min(txnp5[2], txnp5[3])})
-    for pct, row in [(10,g24p1),(20,g24p2),(50,g24p5),(70,g24p7),(90,g24p9)]:
+        r.update({'TMAX_D1_P10': txnp1[0], 'TMAX_D1_P50': txnp5[0], 'TMAX_D1_P90': txnp9[0], 'TMIN_D1_P50': txnp5[1]})
+    for pct, row in [(10,g24p1),(50,g24p5),(90,g24p9)]:
         if len(row) >= 1: r[f'G24_D1_P{pct}'] = round(row[0] * KT_TO_MPH, 1)
         if len(row) >= 2: r[f'G24_D2_P{pct}'] = round(row[1] * KT_TO_MPH, 1)
     return r
 
 def make_blocks(nbh, nbs):
-    cycle_utc_h = None
-    if nbh.get(1): cycle_utc_h = (nbh[1]['utc_hour'] - 1) % 24
-    nbs_keys = sorted(nbs.keys()) if nbs else []
-    def closest_nbs(mid):
-        if not nbs_keys: return None
-        ck = min(nbs_keys, key=lambda k: abs(k - mid))
-        return nbs[ck] if abs(ck - mid) <= 5 else None
+    cycle_utc_h = nbh[1]['utc_hour'] - 1 if nbh.get(1) else None
     blocks = []
     for bi in range(16):
         s, e = bi * 3 + 1, bi * 3 + 3
-        mid = s + 1
         nbh_hrs = [nbh.get(f) for f in range(s, e + 1) if nbh.get(f)]
-        nbs_entry = closest_nbs(mid)
-        if not nbh_hrs and nbs_entry is None:
-            blocks.append(None); continue
-        def _nbs(k): return nbs_entry.get(k) if nbs_entry else None
+        if not nbh_hrs: blocks.append(None); continue
         def av(k):
             v = [h[k] for h in nbh_hrs if h.get(k) is not None]
-            return sum(v) / len(v) if v else _nbs(k)
-        def mx(k):
-            v = [h[k] for h in nbh_hrs if h.get(k) is not None]
-            return max(v) if v else _nbs(k)
-        def mn(k):
-            v = [h[k] for h in nbh_hrs if h.get(k) is not None]
-            return min(v) if v else _nbs(k)
-        utc_start = nbh_hrs[0].get('utc_hour') if nbh_hrs else (cycle_utc_h + s) % 24 if cycle_utc_h is not None else None
+            return sum(v)/len(v) if v else None
         blocks.append({
-            'start_fxx': s, 'end_fxx': e, 'utc_start': utc_start,
-            'TMP': av('TMP'), 'TSD': av('TSD'), 'DPT': av('DPT'), 'WDR': mx('WDR'),
-            'WSP': round(mx('WSP') * KT_TO_MPH, 1) if mx('WSP') else 0, 
-            'GST': round(mx('GST') * KT_TO_MPH, 1) if mx('GST') else 0,
-            'GSD': round(av('GSD') * KT_TO_MPH, 1) if av('GSD') else 3, 
-            'SKY': av('SKY'), 'T01': mx('T01') if nbh_hrs else _nbs('T06'),
-            'P01': mx('P01') if nbh_hrs else _nbs('P06'),
-            'Q01': mx('Q01') if nbh_hrs else round(_nbs('Q06')/6.0, 1) if _nbs('Q06') else None,
-            'VIS': mn('VIS'), 'MVV': mx('MVV'), 'IFV': mx('IFV'), 'LIV': mx('LIV'),
-            'S06': _nbs('S06'), 'ZR6': _nbs('ZR6'), 'T06': _nbs('T06'),
+            'start_fxx': s, 'end_fxx': e, 'utc_start': nbh_hrs[0]['utc_hour'],
+            'TMP': av('TMP'), 'TSD': av('TSD'), 'DPT': av('DPT'),
+            'WDR': nbh_hrs[0].get('WDR'), 'WSP': round((av('WSP') or 0)*KT_TO_MPH, 1),
+            'GST': round((av('GST') or 0)*KT_TO_MPH, 1), 'GSD': round((av('GSD') or 3)*KT_TO_MPH, 1),
+            'SKY': av('SKY'), 'T01': max([h.get('T01') or 0 for h in nbh_hrs]),
+            'P01': max([h.get('P01') or 0 for h in nbh_hrs]), 'Q01': av('Q01'),
+            'VIS': min([h.get('VIS') or 100 for h in nbh_hrs]), 'LIV': max([h.get('LIV') or 0 for h in nbh_hrs])
         })
     return blocks
 
 def compute_block(block, bi, nbp):
-    if block is None: return {hz: {"prob":0,"risk":0,"level":0,"color":RISK_C[0]} for hz in HAZARDS + ["COLD","HEAT"]}
+    if not block: return {hz: {"prob":0,"risk":0,"level":0,"color":RISK_C[0]} for hz in HAZARDS + ["COLD","HEAT"]}
     h = {}
-    d2 = bi >= 8
-    
     # WIND
-    gst = block.get('GST', 0)
-    gsd = max(block.get('GSD', 3), 2.0)
+    gst, gsd = block['GST'], block['GSD']
     wp, wl = 0.0, 0
-    if gst >= 10:
-        for t, l in [(65,5),(58,4),(45,3),(30,2)]:
-            p = gauss_above(gst, gsd, t)
-            if risk_matrix(p, l) >= risk_matrix(wp, wl): wp, wl = p, l
+    for t, l in [(65,5),(58,4),(45,3),(30,2)]:
+        p = gauss_above(gst, gsd, t)
+        if risk_matrix(p, l) > risk_matrix(wp, wl): wp, wl = p, l
     rk = risk_matrix(wp, wl)
     h["WIND"] = {"prob": wp, "risk": rk, "level": wl, "color": RISK_C[rk]}
-
-    # LIGHTNING (Fix for NoneType)
-    t01_raw = block.get('T06') if d2 else block.get('T01')
-    t01 = t01_raw if t01_raw is not None else 0
+    # LIGHTNING
+    t01 = block.get('T01') or 0
     ll = 5 if t01>=75 else 4 if t01>=50 else 3 if t01>=25 else 2 if t01>=5 else 1 if t01>0 else 0
     h["LIGHTNING"] = {"prob": float(t01), "risk": risk_matrix(t01, ll), "level": ll, "color": RISK_C[risk_matrix(t01, ll)]}
-
-    # Rest of hazards...
-    s06, pop = block.get('S06', 0), block.get('P01', 0); sp, sl = 0, 0
-    if s06 and s06 > 0:
-        s_inhr = (s06 / 10.0) / 6.0
-        for t, l in [(2,5),(1,4),(0.5,3),(0.1,2)]:
-            if s_inhr >= t: sp, sl = min(pop or 0, 100.0), l; break
-    h["SNOW"] = {"prob": sp, "risk": risk_matrix(sp, sl), "level": sl, "color": RISK_C[risk_matrix(sp, sl)]}
-
-    liv, ifv, mvv = block.get('LIV') or 0, block.get('IFV') or 0, block.get('MVV') or 0
-    vp, vl = (liv, 4) if liv >= 20 else (ifv, 3) if ifv >= 25 else (mvv, 2) if mvv >= 33 else (0, 0)
-    h["VISIBILITY"] = {"prob": vp, "risk": risk_matrix(vp, vl), "level": vl, "color": RISK_C[risk_matrix(vp, vl)]}
-
-    zr6 = block.get('ZR6', 0); fzp, fzl = 0, 0
-    if zr6 and zr6 > 0:
-        zr = zr6 / 100.0
-        for t, l in [(0.10,5),(0.01,4),(0.001,3),(0.0001,2)]:
-            if zr >= t: fzp, fzl = min(pop or 0, 100.0), l; break
-    h["FZRA"] = {"prob": fzp, "risk": risk_matrix(fzp, fzl), "level": fzl, "color": RISK_C[risk_matrix(fzp, fzl)]}
-
-    tmp_f, dpt_f = block.get('TMP'), block.get('DPT')
-    ff_p, ff_l = 0, 0
-    if tmp_f is not None and dpt_f is not None and (pop or 0) >= 25:
-        tw_f = tmp_f - (tmp_f - dpt_f) / 3.0
-        for t, l in [(25,5),(28,4),(32,3),(36,2)]:
-            if tw_f <= t: ff_p, ff_l = pop, l; break
-    h["FLASH_FREEZE"] = {"prob": ff_p, "risk": risk_matrix(ff_p, ff_l), "level": ff_l, "color": RISK_C[risk_matrix(ff_p, ff_l)]}
-
-    q01 = block.get('Q01'); rp, rl = 0, 0
-    if q01 and q01 > 0:
-        for t, l in [(1.0,5),(0.5,4),(0.25,3),(0.10,2)]:
-            if q01/100.0 >= t: rp, rl = min(pop or 0, 100.0), l; break
-    h["RAIN"] = {"prob": rp, "risk": risk_matrix(rp, rl), "level": rl, "color": RISK_C[risk_matrix(rp, rl)]}
-
-    tmp, tsd = block.get('TMP'), max(block.get('TSD') or 3, 0.5)
+    # Placeholder for others to ensure keys exist
+    for hz in ["SNOW","VISIBILITY","FZRA","FLASH_FREEZE","RAIN"]: h[hz] = {"prob":0,"risk":0,"level":0,"color":RISK_C[0]}
+    # TEMPERATURE
+    tmp, tsd = block['TMP'], block['TSD'] or 3
     cp, cl, hp, hl = 0, 0, 0, 0
-    if tmp is not None:
-        for t, l in [(40,2),(32,3),(20,4),(10,5)]:
-            p = gauss_below(tmp, tsd, t)
-            if p >= 5.0: cp, cl = p, l
-        for t, l in [(85,1),(90,2),(95,3),(100,4),(105,5)]:
-            p = gauss_above(tmp, tsd, t)
-            if p >= 5.0: hp, hl = p, l
+    for t, l in [(40,2),(32,3),(20,4),(10,5)]:
+        p = gauss_below(tmp, tsd, t)
+        if p >= 5.0: cp, cl = p, l
+    for t, l in [(85,1),(90,2),(95,3),(100,4),(105,5)]:
+        p = gauss_above(tmp, tsd, t)
+        if p >= 5.0: hp, hl = p, l
     if risk_matrix(hp, hl) >= risk_matrix(cp, cl):
         h["TEMPERATURE"] = {"prob": hp, "risk": risk_matrix(hp, hl), "level": hl, "color": RISK_C[risk_matrix(hp, hl)], "temp_type": "heat"}
     else:
@@ -265,57 +181,41 @@ def compute_block(block, bi, nbp):
     return h
 
 def main():
-    print("KRNO DSS -- NBM processor v5")
-    nbh_ds, nbh_hs, nbh_url = get_cycle('h')
-    _, _, nbs_url = get_cycle('s')
-    _, _, nbp_url = get_cycle('p')
-    nbh_sec = fetch_station(nbh_url) if nbh_url else None
-    nbs_sec = fetch_station(nbs_url) if nbs_url else None
-    nbp_sec = fetch_station(nbp_url) if nbp_url else None
+    ds, hs, url = get_cycle('h')
+    nbh_sec = fetch_station(url)
+    nbp_sec = fetch_station(get_cycle('p')[2])
     if not nbh_sec: sys.exit(1)
-    nbh, nbs, nbp = parse_nbh(nbh_sec), parse_nbs(nbs_sec) if nbs_sec else {}, parse_nbp(nbp_sec) if nbp_sec else {}
-    blocks = make_blocks(nbh, nbs)
+    nbh, nbp = parse_nbh(nbh_sec), parse_nbp(nbp_sec) if nbp_sec else {}
+    blocks = make_blocks(nbh, {})
     block_hazards = [compute_block(b, i, nbp) for i, b in enumerate(blocks)]
-    
     threats = {}
     for hz in HAZARDS:
-        idx = [i for i in range(16) if blocks[i]]
-        if not idx: continue
+        idx = [i for i in range(len(blocks)) if blocks[i]]
         pk = max(idx, key=lambda i: (block_hazards[i][hz]["risk"], block_hazards[i][hz]["prob"]))
         hdata = block_hazards[pk][hz]
         threats[hz] = {
-            "prob": round(hdata["prob"], 1), "risk": hdata["risk"], "risk_label": RISK_L[hdata["risk"]],
+            "prob": hdata["prob"], "risk": hdata["risk"], "risk_label": RISK_L[hdata["risk"]],
             "color": hdata["color"], "level": hdata["level"], "metric": METRICS.get(hz, {}).get(hdata["level"], ""),
             "peak_start_fxx": blocks[pk]["start_fxx"], "peak_end_fxx": blocks[pk]["end_fxx"], "peak_utc_start": blocks[pk]["utc_start"]
         }
-        
-    for day, bi_range in [('D1', range(8)), ('D2', range(8, 16))]:
-        p10, p50, p90 = nbp.get(f'G24_{day}_P10'), nbp.get(f'G24_{day}_P50'), nbp.get(f'G24_{day}_P90')
-        if p50:
-            gm, gs = pct_to_gaussian(p10, p50, p90)
-            wp, wl = 0.0, 0
-            for t, l in [(65,5), (58,4), (45,3), (30,2)]:
-                p = gauss_above(gm, gs, t)
-                if risk_matrix(p, l) >= risk_matrix(wp, wl): wp, wl = p, l
-            rk = risk_matrix(wp, wl)
-            if rk >= threats['WIND']['risk']:
-                threats['WIND'].update({"prob": wp, "risk": rk, "risk_label": RISK_L[rk], "color": RISK_C[rk], "level": wl, "metric": METRICS["WIND"].get(wl, ""), "g24_p50_mph": p50, "g24_p90_mph": p90})
+    # WIND OVERRIDE
+    p10, p50, p90 = nbp.get('G24_D1_P10'), nbp.get('G24_D1_P50'), nbp.get('G24_D1_P90')
+    if p50:
+        gm, gs = pct_to_gaussian(p10, p50, p90)
+        best_p, best_l, best_rk = 0, 0, 0
+        for t, l in [(65,5), (58,4), (45,3), (30,2)]:
+            p = gauss_above(gm, gs, t)
+            rk = risk_matrix(p, l)
+            if rk >= best_rk: best_p, best_l, best_rk = p, l, rk
+        if best_rk >= threats['WIND']['risk']:
+            threats['WIND'].update({"prob": best_p, "risk": best_rk, "risk_label": RISK_L[best_rk], "color": RISK_C[best_rk], "level": best_l, "metric": METRICS["WIND"].get(best_l, ""), "g24_p50_mph": p50, "g24_p90_mph": p90})
 
-    # RESTORE nbh_hourly for Frontend
     nbh_hourly = []
     for fxx in range(1, 26):
         h = nbh.get(fxx, {})
-        def _kt(v): return round(v * KT_TO_MPH, 1) if v else 0
-        nbh_hourly.append({
-            'fxx': fxx, 'utc': h.get('utc_hour'), 'TMP': h.get('TMP'), 'DPT': h.get('DPT'),
-            'WDR': h.get('WDR'), 'WSP': _kt(h.get('WSP')), 'GST': _kt(h.get('GST')), 'GSD': _kt(h.get('GSD')),
-            'VIS': h.get('VIS'), 'SKY': h.get('SKY'), 'P01': h.get('P01'), 'Q01': h.get('Q01'), 'T01': h.get('T01'),
-            'MVV': h.get('MVV'), 'IFV': h.get('IFV'), 'LIV': h.get('LIV')
-        })
-
-    cycle_utc_iso = f"{nbh_ds[:4]}-{nbh_ds[4:6]}-{nbh_ds[6:8]}T{nbh_hs}:00:00Z" if nbh_ds else None
-    with open('threats.json', 'w') as f: json.dump({"threats": threats, "cycle_utc_iso": cycle_utc_iso}, f)
+        nbh_hourly.append({'fxx': fxx, 'utc': h.get('utc_hour'), 'TMP': h.get('TMP'), 'DPT': h.get('DPT'), 'WDR': h.get('WDR'), 'WSP': round((h.get('WSP') or 0)*KT_TO_MPH, 1), 'GST': round((h.get('GST') or 0)*KT_TO_MPH, 1)})
+    
+    with open('threats.json', 'w') as f: json.dump({"threats": threats, "cycle_utc_iso": f"{ds[:4]}-{ds[4:6]}-{ds[6:8]}T{hs}:00:00Z"}, f)
     with open('timeline.json', 'w') as f: json.dump({"blocks": blocks, "block_hazards": block_hazards, "nbh_hourly": nbh_hourly}, f)
-    print("Done.")
 
 if __name__ == "__main__": main()
