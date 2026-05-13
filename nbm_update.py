@@ -267,10 +267,6 @@ def compute_block(block, bi, nbp, prev_block=None):
 
     `prev_block` is the 3-hr block immediately before this one (or None for bi=0).
     It is used only by FLASH_FREEZE to detect "was wet, now freezing" sequences.
-    
-    `nbp` contains 24h percentiles which are used to rescale block computations
-    when the 24h peak/min exceeds the block mean. This gives better probability
-    estimates that match the observed daily extremes.
     """
     if not block:
         return {hz: _pack(0, 0) for hz in HAZARDS + ["COLD","HEAT"]}
@@ -279,21 +275,10 @@ def compute_block(block, bi, nbp, prev_block=None):
 
     # ───── WIND ─────────────────────────────────────────────────────────────
     # Gaussian on peak gust (mean=GST, std=GSD). Pick the highest-risk threshold.
-    # If 24h peak gust (P90) > block mean, use P75 as a better proxy for the block.
     gst, gsd = block.get('GST'), block.get('GSD')
-    gust_to_use = gst  # Default to block mean
-    
-    # Check if 24h peak exceeds block mean
-    g24p75 = nbp.get('G24_D1_P7') if nbp else None  # P7 ~ 75th percentile
-    g24p90 = nbp.get('G24_D1_P9') if nbp else None  # P90
-    if g24p90 is not None and gst is not None and g24p90 > gst:
-        # 24h peak is higher than this block's mean — use P75 for better estimate
-        if g24p75 is not None:
-            gust_to_use = g24p75
-    
     best_p, best_l, best_rk = 0.0, 0, 0
     for thr, lvl in [(65,5), (58,4), (45,3), (30,2)]:
-        p  = gauss_above(gust_to_use, gsd, thr)
+        p  = gauss_above(gst, gsd, thr)
         rk = risk_matrix(p, lvl)
         if rk > best_rk or (rk == best_rk and p > best_p):
             best_p, best_l, best_rk = p, lvl, rk
@@ -426,40 +411,16 @@ def compute_block(block, bi, nbp, prev_block=None):
     #   HEAT: L2=90-95°F, L3=95-100°F, L4=100-105°F, L5=>105°F.  (L1 = <90°F.)
     # Walk thresholds and pick the level that yields the highest risk (matches
     # how WIND handles its bands), not just "last threshold that fires".
-    # 
-    # Use 24h percentiles as proxies if they exceed/fall-below the block mean:
-    # - For HEAT: if 24h max (P90) > block mean, use P75
-    # - For COLD: if 24h min (P1) < block mean, use P25
     tmp, tsd = block.get('TMP'), (block.get('TSD') or 3)
-    
-    # Get 24h percentiles for temperature adjustments
-    tmax_p75 = nbp.get('TMAX_D1_P7') if nbp else None
-    tmax_p90 = nbp.get('TMAX_D1_P9') if nbp else None
-    tmin_p1 = nbp.get('TMIN_D1_P1') if nbp else None
-    tmin_p25 = nbp.get('TMIN_D1_P5') if nbp else None  # P5 ~ P25 for min
-    
-    # COLD computation: use P25 if 24h min is lower than block mean
-    cold_tmp = tmp
-    if tmin_p1 is not None and tmp is not None and tmin_p1 < tmp:
-        if tmin_p25 is not None:
-            cold_tmp = tmin_p25
-    
     cp, cl, c_rk = 0, 0, 0
     for thr, lvl in [(40, 2), (32, 3), (20, 4), (10, 5)]:
-        p = gauss_below(cold_tmp, tsd, thr)
+        p = gauss_below(tmp, tsd, thr)
         rk = risk_matrix(p, lvl)
         if rk > c_rk or (rk == c_rk and p > cp):
             cp, cl, c_rk = p, lvl, rk
-    
-    # HEAT computation: use P75 if 24h max is higher than block mean
-    heat_tmp = tmp
-    if tmax_p90 is not None and tmp is not None and tmax_p90 > tmp:
-        if tmax_p75 is not None:
-            heat_tmp = tmax_p75
-    
     hp, hl, h_rk = 0, 0, 0
     for thr, lvl in [(90, 2), (95, 3), (100, 4), (105, 5)]:
-        p = gauss_above(heat_tmp, tsd, thr)
+        p = gauss_above(tmp, tsd, thr)
         rk = risk_matrix(p, lvl)
         if rk > h_rk or (rk == h_rk and p > hp):
             hp, hl, h_rk = p, lvl, rk
