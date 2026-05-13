@@ -1760,25 +1760,37 @@
                     // cycle_utc_iso is "YYYY-MM-DDTHH:00:00Z" — parse as UTC cycle start
                     // peak_start_fxx values in threats.json are offsets from this time
                     const iso = threatsResp.value.cycle_utc_iso;
-                    if (iso) {
+               if (iso) {
                         cycleStartTime = new Date(iso).getTime();
-                        // Freshness indicator
-                        const ageMs  = Date.now() - cycleStartTime;
-                        const ageHrs = ageMs / 3600000;
-                        const fresh  = ageHrs < 3;
-                        const dot   = document.getElementById('cycle-fresh-dot');
+                        
+                        const dot = document.getElementById('cycle-fresh-dot');
                         const label = document.getElementById('cycle-fresh-label');
+                        
                         if (dot && label) {
-                            // Show full cycle string e.g. "NBH 09Z / NBS 09Z / NBP 07Z"
-                            const cycleStr = threatsResp.value.cycle || '';
-                            dot.style.background   = fresh ? '#22c55e' : '#ef4444';
-                            dot.style.animation    = fresh ? 'live-pulse 2s ease-in-out infinite' : 'sop-flash 1.5s infinite';
-                            dot.title              = fresh ? 'Forecast is current' : 'Forecast may be stale (>3h old)';
-                            label.textContent      = cycleStr;
-                            label.style.color      = fresh ? '#52525b' : '#ef4444';
+                            // 1. Extract just the Zulu hour from the ISO string
+                            const cycleDate = new Date(cycleStartTime);
+                            const zuluHour = String(cycleDate.getUTCHours()).padStart(2, '0') + 'Z';
+                            
+                            // 2. Check if older than 90 minutes
+                            const ageMins = (Date.now() - cycleStartTime) / 60000;
+                            const isStale = ageMins > 90;
+                            
+                            // 3. Apply text and styling
+                            label.textContent = `Forecast: ${zuluHour}`;
+                            
+                            if (isStale) {
+                                dot.style.backgroundColor = '#ef4444'; // Red
+                                dot.style.animation = 'flash-alert 1s infinite ease-in-out'; // Flashing
+                                label.style.color = '#ef4444';
+                                dot.title = 'Forecast is stale (>90 mins old)';
+                            } else {
+                                dot.style.backgroundColor = '#22c55e'; // Green
+                                dot.style.animation = 'none'; // Solid
+                                label.style.color = '#71717a';
+                                dot.title = 'Forecast is current';
+                            }
                         }
                     }
-                }
 
                 // NBM blocks from timeline.json (assigned to module-scope vars)
                 if (timelineResp.status === 'fulfilled' && timelineResp.value.blocks) {
