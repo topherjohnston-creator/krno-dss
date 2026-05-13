@@ -440,23 +440,53 @@ def main():
             metric_key = "HEAT" if pk_hz.get("temp_type") == "heat" else "COLD"
         else:
             metric_key = hz
-        threats[hz] = {
-            "prob": pk_hz["prob"], "risk": pk_hz["risk"],
-            "risk_label": RISK_L[pk_hz["risk"]], "color": pk_hz["color"],
-            "level": pk_hz["level"],
-            "metric": METRICS.get(metric_key, {}).get(pk_hz["level"], ""),
-            "peak_start_fxx": blocks[pk]["start_fxx"],
-            "peak_end_fxx": blocks[pk]["end_fxx"],
-            "peak_utc_start": blocks[pk]["utc_start"],
-        }
-        # Surface temp_type so the frontend can label "Heat" vs "Cold" if it wants
-        if hz == "TEMPERATURE" and "temp_type" in pk_hz:
-            threats[hz]["temp_type"] = pk_hz["temp_type"]
+        
+        # Custom display thresholds per hazard
+        display = False
+        if hz == "LIGHTNING":
+            # Show lightning if 0% < prob < 5% (low but operationally important)
+            display = 0 < pk_hz["prob"] < 5
+        elif hz == "WIND":
+            # Show wind only if risk >= 2 (MINOR or higher, i.e., >=30 mph threat)
+            display = pk_hz["risk"] >= 2
+        elif hz == "RAIN":
+            # Show rain if it's between 0.01" and 0.10" (trace to light)
+            # Rain level corresponds to rate_in_hr in hundredths of inches
+            rain_rate = pk_hz.get("rate_in_hr", 0)
+            display = 0.01 <= rain_rate <= 0.10
+        else:
+            # All other hazards: show if risk >= 2 (MINOR or higher)
+            display = pk_hz["risk"] >= 2
+        
+        if display:
+            threats[hz] = {
+                "prob": pk_hz["prob"], "risk": pk_hz["risk"],
+                "risk_label": RISK_L[pk_hz["risk"]], "color": pk_hz["color"],
+                "level": pk_hz["level"],
+                "metric": METRICS.get(metric_key, {}).get(pk_hz["level"], ""),
+                "peak_start_fxx": blocks[pk]["start_fxx"],
+                "peak_end_fxx": blocks[pk]["end_fxx"],
+                "peak_utc_start": blocks[pk]["utc_start"],
+            }
+            # Surface temp_type so the frontend can label "Heat" vs "Cold" if it wants
+            if hz == "TEMPERATURE" and "temp_type" in pk_hz:
+                threats[hz]["temp_type"] = pk_hz["temp_type"]
+        else:
+            # Not displayed: create minimal entry with risk=0 so frontend knows it exists but isn't active
+            threats[hz] = {
+                "prob": 0.0, "risk": 0,
+                "risk_label": "NONE", "color": "#3f3f46",
+                "level": 0, "metric": "",
+                "peak_start_fxx": blocks[pk]["start_fxx"],
+                "peak_end_fxx": blocks[pk]["end_fxx"],
+                "peak_utc_start": blocks[pk]["utc_start"],
+            }
 
     # ───── TEMPERATURE OVERRIDE WITH 24H MAX/MIN ─────────────────────────
     # Use NBP's TXN (24-hour max/min) instead of block averages for the
     # threat matrix, since they're more accurate. The peak timing still comes
     # from the hourly block (when it actually occurs during the day).
+    # Only show if risk >= 2 (MINOR or higher), not LITTLE-TO-NONE (risk=1).
     tmax_d1 = nbp.get('TMAX_D1_P50')
     tmin_d1 = nbp.get('TMIN_D1_P50')
     if tmax_d1 is not None or tmin_d1 is not None:
@@ -469,7 +499,7 @@ def main():
                 rk = risk_matrix(p, lvl)
                 if rk > h_rk or (rk == h_rk and p > hp):
                     hp, hl, h_rk = p, lvl, rk
-            if h_rk > 0:  # Only override if there's actual heat risk
+            if h_rk >= 2:  # Only override if there's MINOR or higher heat risk
                 threats['TEMPERATURE'].update({
                     "prob": hp, "risk": h_rk, "risk_label": RISK_L[h_rk],
                     "color": RISK_C[h_rk], "level": hl,
@@ -486,7 +516,7 @@ def main():
                 rk = risk_matrix(p, lvl)
                 if rk > c_rk or (rk == c_rk and p > cp):
                     cp, cl, c_rk = p, lvl, rk
-            if c_rk > 0:  # Only override if there's actual cold risk
+            if c_rk >= 2:  # Only override if there's MINOR or higher cold risk
                 threats['TEMPERATURE'].update({
                     "prob": cp, "risk": c_rk, "risk_label": RISK_L[c_rk],
                     "color": RISK_C[c_rk], "level": cl,
@@ -515,6 +545,22 @@ def main():
                 "metric": METRICS["WIND"].get(best_l, ""),
                 "g24_d1_p50_mph": g24p5  # For reference in frontend
             })
+            # Also update the peak block in timeline so it displays the 24h value
+            pk_wind = max([i for i in range(len(blocks)) if blocks[i]], 
+                         key=lambda i: (block_hazards[i]['WIND']['risk'], 
+                                       block_hazards[i]['WIND']['prob']))
+            block_hazards[pk_wind]['WIND'] = threats['WIND'].copy()
+
+    # Also apply temperature overrides to peak blocks for timeline visibility
+    if tmax_d1 is not None or tmin_d1 is not None:
+        try:
+            pk_temp = max([i for i in range(len(blocks)) if blocks[i]], 
+                         key=lambda i: (block_hazards[i]['TEMPERATURE']['risk'], 
+                                       block_hazards[i]['TEMPERATURE']['prob']))
+            if threats['TEMPERATURE']['risk'] > 0:
+                block_hazards[pk_temp]['TEMPERATURE'] = threats['TEMPERATURE'].copy()
+        except (ValueError, IndexError):
+            pass  # No valid blocks to update
 
     nbh_hourly = []
     for fxx in range(1, 26):
