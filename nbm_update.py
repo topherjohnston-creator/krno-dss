@@ -97,25 +97,6 @@ def parse_nbh(sec):
         data[fxx] = entry
     return data
 
-def parse_nbs(sec):
-    fhr_row = []
-    for line in sec.split('\n'):
-        if 'FHR' in line:
-            fhr_row = [int(x) for x in re.findall(r'\d+', line[4:])]
-            break
-    rows = {}
-    for el in ['TMP','TSD','DPT','DSD','WDR','WSP','GST','GSD','SKY','P06','Q06','S06','ZR6','T06']:
-        v = parse_row(el, sec)
-        if v: rows[el] = v
-    data = {}
-    for i, fxx in enumerate(fhr_row):
-        if fxx > 72: break
-        entry = {'fxx': fxx}
-        for el, vals in rows.items():
-            if i < len(vals): entry[el] = None if vals[i] in (-99, 999) else vals[i]
-        data[fxx] = entry
-    return data
-
 def parse_nbp(sec):
     r = {}
     g24p1, g24p5, g24p9 = parse_row('G24P1', sec), parse_row('G24P5', sec), parse_row('G24P9', sec)
@@ -124,12 +105,10 @@ def parse_nbp(sec):
         r.update({'TMAX_D1_P10': txnp1[0], 'TMAX_D1_P50': txnp5[0], 'TMAX_D1_P90': txnp9[0], 'TMIN_D1_P50': txnp5[1]})
     for pct, row in [(10,g24p1),(50,g24p5),(90,g24p9)]:
         if len(row) >= 1: r[f'G24_D1_P{pct}'] = round(row[0] * KT_TO_MPH, 1)
-        if len(row) >= 2: r[f'G24_D2_P{pct}'] = round(row[1] * KT_TO_MPH, 1)
     return r
 
 def make_blocks(nbh, nbs):
     if not nbh.get(1): return [None]*16
-    cycle_utc_h = nbh[1]['utc_hour'] - 1
     blocks = []
     for bi in range(16):
         s, e = bi * 3 + 1, bi * 3 + 3
@@ -152,21 +131,20 @@ def make_blocks(nbh, nbs):
 def compute_block(block, bi, nbp):
     if not block: return {hz: {"prob":0,"risk":0,"level":0,"color":RISK_C[0]} for hz in HAZARDS + ["COLD","HEAT"]}
     h = {}
-    # WIND
+    # WIND Logic Fix
     gst, gsd = block['GST'], block['GSD']
-    wp, wl = 0.0, 0
+    best_p, best_l, best_rk = 0.0, 0, 0
     for t, l in [(65,5),(58,4),(45,3),(30,2)]:
         p = gauss_above(gst, gsd, t)
-        if risk_matrix(p, l) > risk_matrix(wp, wl): wp, wl = p, l
-    rk = risk_matrix(wp, wl)
-    h["WIND"] = {"prob": wp, "risk": rk, "level": wl, "color": RISK_C[rk]}
-    # LIGHTNING
-    t01 = block.get('T01') or 0
+        rk = risk_matrix(p, l)
+        if rk > best_rk or (rk == best_rk and p > best_p): best_p, best_l, best_rk = p, l, rk
+    h["WIND"] = {"prob": best_p, "risk": best_rk, "level": best_l, "color": RISK_C[best_rk]}
+    # LIGHTNING Fix
+    t01 = float(block.get('T01') or 0)
     ll = 5 if t01>=75 else 4 if t01>=50 else 3 if t01>=25 else 2 if t01>=5 else 1 if t01>0 else 0
-    h["LIGHTNING"] = {"prob": float(t01), "risk": risk_matrix(t01, ll), "level": ll, "color": RISK_C[risk_matrix(t01, ll)]}
-    # Placeholder for others
+    h["LIGHTNING"] = {"prob": t01, "risk": risk_matrix(t01, ll), "level": ll, "color": RISK_C[risk_matrix(t01, ll)]}
     for hz in ["SNOW","VISIBILITY","FZRA","FLASH_FREEZE","RAIN"]: h[hz] = {"prob":0,"risk":0,"level":0,"color":RISK_C[0]}
-    # TEMPERATURE
+    # TEMPERATURE Fix
     tmp, tsd = block['TMP'], block['TSD'] or 3
     cp, cl, hp, hl = 0, 0, 0, 0
     for t, l in [(40,2),(32,3),(20,4),(10,5)]:
@@ -193,13 +171,13 @@ def main():
     for hz in HAZARDS:
         idx = [i for i in range(len(blocks)) if blocks[i]]
         pk = max(idx, key=lambda i: (block_hazards[i][hz]["risk"], block_hazards[i][hz]["prob"]))
-        hdata = block_hazards[pk][hz]
         threats[hz] = {
-            "prob": hdata["prob"], "risk": hdata["risk"], "risk_label": RISK_L[hdata["risk"]],
-            "color": hdata["color"], "level": hdata["level"], "metric": METRICS.get(hz, {}).get(hdata["level"], ""),
+            "prob": block_hazards[pk][hz]["prob"], "risk": block_hazards[pk][hz]["risk"], 
+            "risk_label": RISK_L[block_hazards[pk][hz]["risk"]], "color": block_hazards[pk][hz]["color"], 
+            "level": block_hazards[pk][hz]["level"], "metric": METRICS.get(hz, {}).get(block_hazards[pk][hz]["level"], ""),
             "peak_start_fxx": blocks[pk]["start_fxx"], "peak_end_fxx": blocks[pk]["end_fxx"], "peak_utc_start": blocks[pk]["utc_start"]
         }
-    # WIND OVERRIDE (Probability Mapping Fix)
+    # WIND OVERRIDE WITH P10/P50/P90
     p10, p50, p90 = nbp.get('G24_D1_P10'), nbp.get('G24_D1_P50'), nbp.get('G24_D1_P90')
     if p50:
         gm, gs = pct_to_gaussian(p10, p50, p90)
@@ -207,28 +185,24 @@ def main():
         for t, l in [(65,5), (58,4), (45,3), (30,2)]:
             p = gauss_above(gm, gs, t)
             rk = risk_matrix(p, l)
-            if rk > best_rk or (rk == best_rk and p > best_p):
-                best_p, best_l, best_rk = p, l, rk
+            if rk > best_rk or (rk == best_rk and p > best_p): best_p, best_l, best_rk = p, l, rk
         if best_rk >= threats['WIND']['risk']:
             threats['WIND'].update({
-                "prob": best_p, "risk": best_rk, "risk_label": RISK_L[best_rk], 
-                "color": RISK_C[best_rk], "level": best_l, "metric": METRICS["WIND"].get(best_l, ""), 
-                "g24_p50_mph": p50, "g24_p90_mph": p90
+                "prob": best_p, "risk": best_rk, "risk_label": RISK_L[best_rk], "color": RISK_C[best_rk], 
+                "level": best_l, "metric": METRICS["WIND"].get(best_l, ""), 
+                "g24_p10_mph": p10, "g24_p50_mph": p50, "g24_p90_mph": p90
             })
 
-    # FULL HOURLY DATA RESTORATION (Fixes Cloud/Thunder/Precip Hovers)
     nbh_hourly = []
     for fxx in range(1, 26):
         h = nbh.get(fxx, {})
         def _kt(v): return round((v or 0)*KT_TO_MPH, 1)
         nbh_hourly.append({
             'fxx': fxx, 'utc': h.get('utc_hour'), 'TMP': h.get('TMP'), 'TSD': h.get('TSD'), 
-            'DPT': h.get('DPT'), 'WDR': h.get('WDR'), 'WSP': _kt(h.get('WSP')), 
-            'GST': _kt(h.get('GST')), 'GSD': _kt(h.get('GSD')), 'SKY': h.get('SKY'),
-            'T01': h.get('T01'), 'P01': h.get('P01'), 'Q01': h.get('Q01'),
-            'VIS': h.get('VIS'), 'MVV': h.get('MVV'), 'IFV': h.get('IFV'), 'LIV': h.get('LIV')
+            'DPT': h.get('DPT'), 'WDR': h.get('WDR'), 'WSP': _kt(h.get('WSP')), 'GST': _kt(h.get('GST')), 
+            'GSD': _kt(h.get('GSD')), 'SKY': h.get('SKY'), 'T01': h.get('T01'), 'P01': h.get('P01'), 
+            'Q01': h.get('Q01'), 'VIS': h.get('VIS'), 'LIV': h.get('LIV'), 'IFV': h.get('IFV'), 'MVV': h.get('MVV')
         })
-    
     with open('threats.json', 'w') as f: json.dump({"threats": threats, "cycle_utc_iso": f"{ds[:4]}-{ds[4:6]}-{ds[6:8]}T{hs}:00:00Z"}, f)
     with open('timeline.json', 'w') as f: json.dump({"blocks": blocks, "block_hazards": block_hazards, "nbh_hourly": nbh_hourly}, f)
 
