@@ -134,7 +134,6 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-2 gap-4 h-full">
         
         <div class="panel p-4" style="z-index: 20;"> 
-            <!-- Panel title row: title top-left, Threat Matrix label top-right -->
             <div class="flex justify-between items-start mb-3">
                 <div class="flex flex-col">
                     <div style="font-family:'Oswald',sans-serif; font-size:1.05rem; font-weight:700; color:#e2e8f0; letter-spacing:0.06em; text-transform:uppercase; line-height:1.1;">
@@ -150,7 +149,6 @@
             <div id="hazards-grid" class="grid grid-cols-4 gap-3 flex-grow h-full relative" style="z-index: 10;"></div>
             
             <div class="flex justify-between items-center mt-3 pt-2 border-t border-[#27272a]">
-                <!-- NOAA/NWS logos bottom-left -->
                 <div class="flex items-center gap-2">
                     <img src="https://upload.wikimedia.org/wikipedia/commons/7/79/NOAA_logo.svg" alt="NOAA" class="h-7 w-7 drop-shadow-md" style="opacity:0.55;">
                     <img src="https://upload.wikimedia.org/wikipedia/commons/f/ff/US-NationalWeatherService-Logo.svg" alt="NWS" class="h-7 w-7 drop-shadow-md" style="opacity:0.55;">
@@ -159,7 +157,6 @@
                         <span class="text-[8px] font-bold text-slate-600 uppercase leading-none">Weather Service</span>
                     </div>
                 </div>
-                <!-- Risk legend right-aligned -->
                 <div class="flex items-center gap-3 flex-wrap justify-end">
                      <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #3f3f46;"></div>None</div>
                      <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #e2f0cb;"></div>Little to None</div>
@@ -190,7 +187,6 @@
                 <div class="h-10 flex w-full pl-24 relative mt-1">
                     <div id="timeline-axis" class="w-full h-full relative text-xs text-slate-400"></div>
                 </div>
-                <!-- Forecast cycle freshness indicator -->
                 <div class="flex justify-end items-center mt-1" style="padding-right:4px;">
                     <span id="cycle-fresh-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;flex-shrink:0;"></span>
                     <span id="cycle-fresh-label" class="text-slate-500 font-mono" style="font-size:0.6rem;"></span>
@@ -209,52 +205,40 @@
 
             <div class="flex-grow flex gap-3 min-h-0">
 
-                <!-- LEFT: Big Wind Graphic -->
                 <div class="asos-box flex flex-col items-center justify-between" id="wind-obs-box" style="width:48%; padding:10px;cursor:crosshair;" onmouseenter="showWindForecast()" onmouseleave="hideTooltip()">
                     <div class="asos-label w-full">WIND</div>
 
-                    <!-- Flight cat + xwind badges -->
                     <div class="flex gap-2 mt-1 w-full justify-end">
                         <div class="flight-cat" id="flight-cat-badge">--</div>
                         <div class="threat-badge" id="xwind-badge" style="display:none;">X-WIND</div>
                     </div>
 
-                    <!-- Large wind rose -->
                     <div style="flex:1; width:100%; display:flex; align-items:center; justify-content:center; min-height:0; padding:4px 0;">
                         <svg viewBox="0 0 200 200" style="width:100%;height:100%;max-height:200px;pointer-events:none;" preserveAspectRatio="xMidYMid meet">
-                            <!-- Range rings -->
                             <circle cx="100" cy="100" r="90" fill="none" stroke="#3f3f46" stroke-width="1"/>
                             <circle cx="100" cy="100" r="60" fill="none" stroke="#3f3f46" stroke-width="0.5" stroke-dasharray="3,3"/>
                             <circle cx="100" cy="100" r="30" fill="none" stroke="#3f3f46" stroke-width="0.5" stroke-dasharray="2,2"/>
-                            <!-- Crosshairs -->
                             <line x1="100" y1="10" x2="100" y2="190" stroke="#52525b" stroke-width="0.5"/>
                             <line x1="10" y1="100" x2="190" y2="100" stroke="#52525b" stroke-width="0.5"/>
-                            <!-- Cardinal labels -->
                             <text x="100" y="8" text-anchor="middle" fill="#71717a" font-size="9" font-family="monospace" font-weight="bold">N</text>
                             <text x="100" y="198" text-anchor="middle" fill="#71717a" font-size="9" font-family="monospace" font-weight="bold">S</text>
                             <text x="196" y="103" text-anchor="end" fill="#71717a" font-size="9" font-family="monospace" font-weight="bold">E</text>
                             <text x="4" y="103" text-anchor="start" fill="#71717a" font-size="9" font-family="monospace" font-weight="bold">W</text>
-                            <!-- KRNO Runways: 17L/35R, 17R/35L (heading 170), 8/26 (heading 80) -->
                             <g opacity="0.5">
-                              <!-- 17R/35L (right parallel, heading 170°) -->
                               <g transform="rotate(170, 100, 100)">
                                 <rect x="98" y="12" width="7" height="176" fill="#3f3f46" rx="1"/>
                               </g>
-                              <!-- 17L/35R (left parallel, heading 170°) -->
                               <g transform="rotate(170, 100, 100)">
                                 <rect x="87" y="18" width="6" height="164" fill="#3f3f46" rx="1" opacity="0.7"/>
                               </g>
-                              <!-- 8/26 crosswind (heading 080°) -->
                               <g transform="rotate(80, 100, 100)">
                                 <rect x="97" y="35" width="6" height="130" fill="#3f3f46" rx="1" opacity="0.7"/>
                               </g>
                             </g>
-                            <!-- Runway labels -->
                             <text x="107" y="16" fill="#52525b" font-size="6.5" font-family="monospace">17</text>
                             <text x="107" y="190" fill="#52525b" font-size="6.5" font-family="monospace">35</text>
                             <text x="162" y="72" fill="#52525b" font-size="6.5" font-family="monospace">8</text>
                             <text x="32" y="135" fill="#52525b" font-size="6.5" font-family="monospace">26</text>
-                            <!-- Wind arrow group -->
                             <g id="wind-arrow-big" transform="rotate(0, 100, 100)">
                                 <line x1="100" y1="100" x2="100" y2="22" stroke="#fbbf24" stroke-width="5" stroke-linecap="round"/>
                                 <polygon points="100,8 92,28 100,22 108,28" fill="#fbbf24"/>
@@ -264,7 +248,6 @@
                         </svg>
                     </div>
 
-                    <!-- Speed / Gust / Direction -->
                     <div class="w-full text-center" style="margin-top:4px;">
                         <div style="font-family:'JetBrains Mono',monospace; font-size:2.6rem; font-weight:800; color:white; line-height:1; display:flex; align-items:baseline; justify-content:center; gap:5px;">
                             <span id="w-spd">--</span>
@@ -276,10 +259,8 @@
                     </div>
                 </div>
 
-                <!-- RIGHT: 3-row x 2-col grid -->
                 <div style="width:52%; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr; gap:8px;">
 
-                    <!-- Row 1: Visibility | Sky Condition -->
                     <div class="asos-box">
                         <div class="asos-label">VISIBILITY</div>
                         <div class="asos-value text-white" id="vis-val">--</div>
@@ -297,7 +278,6 @@
                         <i class="ph-fill ph-cloud absolute bottom-2 right-2 text-2xl opacity-10"></i>
                     </div>
 
-                    <!-- Row 2: Temperature | Present Weather -->
                     <div class="asos-box" id="temp-box"
                          onmouseenter="showTempForecast()" onmouseleave="hideTooltip()">
                         <div class="asos-label">TEMPERATURE</div>
@@ -323,7 +303,6 @@
                         <i class="ph-fill ph-cloud-lightning absolute bottom-2 right-2 text-2xl opacity-10"></i>
                     </div>
 
-                    <!-- Row 3: Dewpoint & RH | 1-Hour Precipitation -->
                     <div class="asos-box" id="dew-box"
                          onmouseenter="showDewForecast()" onmouseleave="hideTooltip()">
                         <div class="asos-label">DEWPOINT</div>
@@ -370,7 +349,6 @@
 
     <script>
         // Config loaded from config.json
-        // Config loaded from config.json (Synoptic token etc)
         let _config = {};
         async function loadConfig() {
             try {
@@ -499,6 +477,17 @@
             { id: 'Rain',        icon: "ph-drop",             name: "Rain/Flooding", timelineName: "RAIN",     prep: "Drainage capacity" },
             { id: 'Temperature', icon: "ph-thermometer",      name: "Temperature",   timelineName: "TEMP",     prep: "Heat/cold stress" },
         ];
+
+        // --- DATA STATE ---
+        let liveMetar = null;
+        let _prevObs = null;  // previous observation for trend arrows
+        let liveAlerts = [];
+        let cycleStartTime = null;
+        let nbmBlocks = null;         // timeline.json blocks (module scope for tooltip)
+        let nbmBlockHazards = null;   // timeline.json block_hazards
+        let nbhHourly = [];           // raw NBH hourly data (1-hr resolution, fxx 1-25)
+        let refsThreats = null;       // Global scope for wind tooltip
+        let refsTimeline = null;      // Global scope for timeline tooltips
 
         document.addEventListener('DOMContentLoaded', () => {
             initDashboard();
@@ -966,15 +955,6 @@
             else if (e.includes("watch")) riskLevel = 2; 
             return RISK_LEVELS[riskLevel];
         }
-
-        // --- DATA STATE ---
-        let liveMetar = null;
-        let _prevObs = null;  // previous observation for trend arrows
-        let liveAlerts = [];
-        let cycleStartTime = null;
-        let nbmBlocks = null;         // timeline.json blocks (module scope for tooltip)
-        let nbmBlockHazards = null;   // timeline.json block_hazards
-        let nbhHourly = [];           // raw NBH hourly data (1-hr resolution, fxx 1-25)
 
         function setStatus(msg, color) {
             const el = document.getElementById('fetch-status');
@@ -1762,8 +1742,7 @@
                     fetch('timeline.json' + cacheBust).then(r => r.json())
                 ]);
 
-                let refsThreats = null;
-                let refsTimeline = null;
+                // Removed local declarations of refsThreats and refsTimeline here
                 
                 if (threatsResp.status === 'fulfilled' && threatsResp.value.threats) {
                     refsThreats = threatsResp.value.threats;
