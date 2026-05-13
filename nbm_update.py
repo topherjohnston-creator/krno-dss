@@ -539,10 +539,7 @@ def main():
             # will correct this if needed; raw block temp at 78F should never show.
             display = pk_hz["risk"] >= 2
         elif hz == "RAIN":
-            # Show rain if it's between 0.01" and 0.10" (trace to light)
-            # Rain level corresponds to rate_in_hr in hundredths of inches
-            rain_rate = pk_hz.get("rate_in_hr", 0)
-            display = 0.01 <= rain_rate <= 0.10
+            display = pk_hz["risk"] >= 2
         else:
             # All other hazards: show if risk >= 2 (MINOR or higher)
             display = pk_hz["risk"] >= 2
@@ -586,6 +583,7 @@ def main():
             if rk > best_rk or (rk == best_rk and p > best_p):
                 best_p, best_l, best_rk = p, lvl, rk
         if best_rk >= 2:
+            pk_blk = blocks[peak_gust_block_idx] if peak_gust_block_idx < len(blocks) and blocks[peak_gust_block_idx] else None
             threats['WIND'].update({
                 "prob": best_p, "risk": best_rk, "risk_label": RISK_L[best_rk],
                 "color": RISK_C[best_rk], "level": best_l,
@@ -593,6 +591,9 @@ def main():
                 "g24_p10_mph": g24p1,
                 "g24_p50_mph": g24p5,
                 "g24_p90_mph": g24p9,
+                **({"peak_start_fxx": pk_blk["start_fxx"],
+                    "peak_end_fxx":   pk_blk["end_fxx"],
+                    "peak_utc_start": pk_blk["utc_start"]} if pk_blk else {})
             })
             # Stamp the exact same prob/risk onto the peak gust block so timeline matches
             if 0 <= peak_gust_block_idx < len(block_hazards) and block_hazards[peak_gust_block_idx]:
@@ -617,11 +618,15 @@ def main():
             if rk > h_rk or (rk == h_rk and p > hp):
                 hp, hl, h_rk = p, lvl, rk
         if h_rk >= 2:
+            pk_blk = blocks[peak_max_block_idx] if peak_max_block_idx < len(blocks) and blocks[peak_max_block_idx] else None
             threats['TEMPERATURE'].update({
                 "prob": hp, "risk": h_rk, "risk_label": RISK_L[h_rk],
                 "color": RISK_C[h_rk], "level": hl,
                 "metric": METRICS["HEAT"].get(hl, ""),
-                "temp_type": "heat", "txn_24h_max": tmax_p9
+                "temp_type": "heat", "txn_24h_max": tmax_p9,
+                **({"peak_start_fxx": pk_blk["start_fxx"],
+                    "peak_end_fxx":   pk_blk["end_fxx"],
+                    "peak_utc_start": pk_blk["utc_start"]} if pk_blk else {})
             })
             # Stamp exact same value onto peak max temp block
             if 0 <= peak_max_block_idx < len(block_hazards) and block_hazards[peak_max_block_idx]:
@@ -639,11 +644,15 @@ def main():
             if rk > c_rk or (rk == c_rk and p > cp):
                 cp, cl, c_rk = p, lvl, rk
         if c_rk >= 2:
+            pk_blk = blocks[peak_min_block_idx] if peak_min_block_idx < len(blocks) and blocks[peak_min_block_idx] else None
             threats['TEMPERATURE'].update({
                 "prob": cp, "risk": c_rk, "risk_label": RISK_L[c_rk],
                 "color": RISK_C[c_rk], "level": cl,
                 "metric": METRICS["COLD"].get(cl, ""),
-                "temp_type": "cold", "txn_24h_min": tmin_p1
+                "temp_type": "cold", "txn_24h_min": tmin_p1,
+                **({"peak_start_fxx": pk_blk["start_fxx"],
+                    "peak_end_fxx":   pk_blk["end_fxx"],
+                    "peak_utc_start": pk_blk["utc_start"]} if pk_blk else {})
             })
             # Stamp exact same value onto peak min temp block
             if 0 <= peak_min_block_idx < len(block_hazards) and block_hazards[peak_min_block_idx]:
@@ -663,7 +672,11 @@ def main():
             'GSD': _kt(h.get('GSD')), 'SKY': h.get('SKY'), 'T01': h.get('T01'), 'P01': h.get('P01'), 
             'Q01': h.get('Q01'), 'VIS': h.get('VIS'), 'LIV': h.get('LIV'), 'IFV': h.get('IFV'), 'MVV': h.get('MVV')
         })
-    with open('threats.json', 'w') as f: json.dump({"threats": threats, "cycle_utc_iso": f"{ds[:4]}-{ds[4:6]}-{ds[6:8]}T{hs}:00:00Z"}, f)
+    with open('threats.json', 'w') as f: json.dump({
+        "threats": threats,
+        "cycle_utc_iso": f"{ds[:4]}-{ds[4:6]}-{ds[6:8]}T{hs}:00:00Z",
+        "cycle": f"NBH {hs}Z"
+    }, f)
     with open('timeline.json', 'w') as f: json.dump({"blocks": blocks, "block_hazards": block_hazards, "nbh_hourly": nbh_hourly}, f)
 
 if __name__ == "__main__": main()
