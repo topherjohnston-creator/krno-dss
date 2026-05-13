@@ -434,9 +434,16 @@ def compute_block(block, bi, nbp, prev_block=None):
 def main():
     ds, hs, url = get_cycle('h')
     nbh_sec = fetch_station(url)
-    nbp_sec = fetch_station(get_cycle('p')[2])
+    nbp_url = get_cycle('p')[2]
+    nbp_sec = fetch_station(nbp_url) if nbp_url else None
     if not nbh_sec: sys.exit(1)
     nbh, nbp = parse_nbh(nbh_sec), parse_nbp(nbp_sec) if nbp_sec else {}
+    # DEBUG
+    print(f"DEBUG: NBP URL: {nbp_url}", file=sys.stderr)
+    print(f"DEBUG: NBP section fetched: {nbp_sec is not None}", file=sys.stderr)
+    print(f"DEBUG: NBP dict keys: {list(nbp.keys())}", file=sys.stderr)
+    if 'G24_D1_P5' in nbp:
+        print(f"DEBUG: G24_D1_P5 = {nbp['G24_D1_P5']}", file=sys.stderr)
     blocks = make_blocks(nbh, {})
     block_hazards = [compute_block(b, i, nbp, prev_block=blocks[i-1] if i > 0 else None)
                      for i, b in enumerate(blocks)]
