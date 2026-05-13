@@ -235,8 +235,11 @@ def compute_block(block, bi, nbp):
     rk = risk_matrix(wp, wl)
     h["WIND"] = {"prob": wp, "risk": rk, "level": wl, "color": RISK_C[rk]}
 
-    # -- LIGHTNING ------------------------------------------------------------
-    t01 = block.get('T06') if d2 else block.get('T01') or 0
+# -- LIGHTNING ------------------------------------------------------------
+    # Ensure t01 is a number (default to 0 if None)
+    t01_raw = block.get('T06') if d2 else block.get('T01')
+    t01 = t01_raw if t01_raw is not None else 0
+    
     ll = 5 if t01>=75 else 4 if t01>=50 else 3 if t01>=25 else 2 if t01>=5 else 1 if t01>0 else 0
     h["LIGHTNING"] = {"prob": float(t01), "risk": risk_matrix(t01, ll), "level": ll, "color": RISK_C[risk_matrix(t01, ll)]}
 
