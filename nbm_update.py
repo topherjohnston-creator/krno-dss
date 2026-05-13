@@ -597,7 +597,15 @@ def main():
                     "peak_end_fxx":   pk_blk["end_fxx"],
                     "peak_utc_start": pk_blk["utc_start"]} if pk_blk else {})
             })
-            # Stamp the exact same prob/risk onto the peak gust block so timeline matches
+            # Stamp ALL blocks where raw wind already meets risk>=2,
+            # PLUS override the peak gust block with the authoritative P90 value.
+            for bi, bh in enumerate(block_hazards):
+                if bh and bh.get('WIND', {}).get('risk', 0) >= 2:
+                    block_hazards[bi]['WIND'] = {
+                        "prob": bh['WIND']['prob'], "risk": bh['WIND']['risk'],
+                        "level": bh['WIND']['level'], "color": bh['WIND']['color']
+                    }
+            # Peak gust block gets the authoritative P90-based value
             if 0 <= peak_gust_block_idx < len(block_hazards) and block_hazards[peak_gust_block_idx]:
                 block_hazards[peak_gust_block_idx]['WIND'] = {
                     "prob": best_p, "risk": best_rk, "level": best_l, "color": RISK_C[best_rk]
