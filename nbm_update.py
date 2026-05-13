@@ -9,16 +9,32 @@ STATION    = "KRNO"
 NOMADS_NBM = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/blend/prod"
 
 _MATRIX = {
-    4: [1, 2, 3, 4, 5],   # >90%
-    3: [1, 2, 3, 4, 4],   # >66%
-    2: [1, 2, 2, 3, 4],   # >33%
-    1: [1, 1, 2, 2, 3],   # >10%
-    0: [1, 1, 1, 2, 2],   # <10%
+    # Risk values from NOAA workflow matrix (image 2). Indexed by probability
+    # bin (rows) and impact level 1-5 (cols, 0-indexed in the list).
+    4: [1, 2, 3, 4, 5],   # Very Likely        (prob > 90%)
+    3: [1, 2, 2, 3, 4],   # Likely             (66% < prob <= 90%)
+    2: [1, 1, 2, 3, 4],   # As likely as not   (33% <= prob <= 66%)
+    1: [1, 1, 2, 2, 3],   # Unlikely           (10% <= prob < 33%)
+    0: [1, 1, 1, 2, 2],   # Extremely Unlikely (prob < 10%)
 }
 
 def risk_matrix(prob, level):
+    """
+    Compute risk rating (1-5) from probability % and impact level (1-5).
+    Returns 0 if either input is 0 (i.e. hazard not in play at all).
+    Probability bin boundaries match NOAA conventions:
+      >90%   = Very Likely
+      66-90% = Likely
+      33-66% = As likely as not
+      10-33% = Unlikely
+      <10%   = Extremely Unlikely
+    """
     if level == 0 or prob == 0: return 0
-    pr = 4 if prob>=90 else 3 if prob>=66 else 2 if prob>=33 else 1 if prob>=10 else 0
+    if   prob >  90: pr = 4
+    elif prob >  66: pr = 3
+    elif prob >= 33: pr = 2
+    elif prob >= 10: pr = 1
+    else:            pr = 0
     return _MATRIX[pr][level - 1]
 
 RISK_C = {0:"#3f3f46",1:"#e2f0cb",2:"#ffeb3b",3:"#ff9800",4:"#f44336",5:"#9c27b0"}
@@ -28,12 +44,14 @@ HAZARDS = ["WIND","LIGHTNING","SNOW","VISIBILITY","FZRA","FLASH_FREEZE","RAIN","
 METRICS = {
     "WIND":        {2:"30-45 mph",    3:"45-58 mph",    4:"58-65 mph",   5:">65 mph"},
     "SNOW":        {2:"T-0.5 in/hr",  3:"0.5-1 in/hr",  4:"1-2 in/hr",   5:">2 in/hr"},
-    "LIGHTNING":   {1:"<5%",  2:"5-25%",        3:"25-50%",       4:"50-75%",      5:">75%"},
+    "LIGHTNING":   {1:"<5%",          2:"5-25%",        3:"25-50%",      4:"50-75%",     5:">75%"},
     "VISIBILITY":  {2:"3-5 SM",       3:"1-3 SM",       4:"0.5-1 SM",    5:"<0.5 SM"},
-    "RAIN":        {2:">0.10 in/hr",  3:">0.25 in/hr",  4:">0.50 in/hr", 5:">1.0 in/hr"},
-    "FZRA":        {2:"Trace",        3:"Trace-0.01in", 4:"0.01-0.10in", 5:">0.10in"},
+    "RAIN":        {2:"0.10-0.25 in/hr", 3:"0.25-0.50 in/hr", 4:"0.50-1.00 in/hr", 5:">1.00 in/hr"},
+    "FZRA":        {2:"Trace",        3:"Trace-0.01 in", 4:"0.01-0.10 in", 5:">0.10 in"},
     "FLASH_FREEZE":{2:"Wet+Tw<36F",   3:"Wet+Tw<32F",   4:"Wet+Tw<28F",  5:"Wet+Tw<25F"},
-    "HEAT":        {1:"85-90F",  2:"90-95F",       3:"95-100F",      4:"100-105F",    5:">105F"},
+    # HEAT and COLD share the TEMPERATURE display slot; the active set is
+    # chosen by the temp_type field on the hazard record.
+    "HEAT":        {2:"90-95F",       3:"95-100F",      4:"100-105F",    5:">105F"},
     "COLD":        {2:"32-40F",       3:"20-32F",       4:"10-20F",      5:"<10F"},
 }
 
@@ -140,7 +158,10 @@ def fetch_station(url):
 def parse_nbh(sec):
     n_cols, utc_row = _utc_col_count(sec)
     elements = ['TMP','TSD','DPT','DSD','WDR','WSP','GST','GSD','SKY',
-                'P01','Q01','T01','VIS','MVV','IFV','LIV']
+                'P01','Q01','T01','S01','I01',
+                'PSN','PRA','PZR','PPL',
+                'VIS','MVV','IFV','LIV',
+                'CIG','MVC','IFC','LIC']
     rows = {el: parse_row(el, sec, n_cols=n_cols) for el in elements}
     data = {}
     # NBH column 0 is the cycle hour itself (fxx=0). Map fxx 1..N to columns 1..N.
@@ -178,46 +199,225 @@ def make_blocks(nbh, nbs):
         def av(k):
             v = [h[k] for h in nbh_hrs if h.get(k) is not None]
             return sum(v)/len(v) if v else None
+        def mx(k, default=0):
+            v = [h[k] for h in nbh_hrs if h.get(k) is not None]
+            return max(v) if v else default
+        def mn(k, default=None):
+            v = [h[k] for h in nbh_hrs if h.get(k) is not None]
+            return min(v) if v else default
         blocks.append({
             'start_fxx': s, 'end_fxx': e, 'utc_start': nbh_hrs[0]['utc_hour'],
-            'TMP': av('TMP'), 'TSD': av('TSD'), 'DPT': av('DPT'),
-            'WDR': nbh_hrs[0].get('WDR'), 'WSP': round((av('WSP') or 0)*KT_TO_MPH, 1),
-            'GST': round((av('GST') or 0)*KT_TO_MPH, 1), 'GSD': round((av('GSD') or 3)*KT_TO_MPH, 1),
-            'SKY': av('SKY'), 'T01': max([h.get('T01') or 0 for h in nbh_hrs]),
-            'P01': max([h.get('P01') or 0 for h in nbh_hrs]), 'Q01': av('Q01'),
-            'VIS': min([h.get('VIS') or 100 for h in nbh_hrs]), 'LIV': max([h.get('LIV') or 0 for h in nbh_hrs])
+            # Temperature / moisture
+            'TMP': av('TMP'), 'TSD': av('TSD'),
+            'DPT': av('DPT'), 'DSD': av('DSD'),
+            # Wind (knots -> mph)
+            'WDR': nbh_hrs[0].get('WDR'),
+            'WSP': round((av('WSP') or 0)*KT_TO_MPH, 1),
+            'GST': round((av('GST') or 0)*KT_TO_MPH, 1),
+            'GSD': round((av('GSD') or 3)*KT_TO_MPH, 1),
+            # Sky / convection
+            'SKY': av('SKY'),
+            'T01': mx('T01'),              # peak thunderstorm prob in the 3h window
+            # Precipitation: P01 peak, Q01 peak rate (was avg — wrong for hazard)
+            'P01': mx('P01'),              # peak hourly precip prob
+            'Q01': mx('Q01'),              # peak hourly QPF (1/100 in)
+            'S01': mx('S01'),              # peak hourly snow (1/10 in)
+            'I01': mx('I01'),              # peak hourly ice (1/100 in)
+            # Conditional precip-type probabilities (peak across window)
+            'PSN': mx('PSN'),
+            'PRA': mx('PRA'),
+            'PZR': mx('PZR'),
+            'PPL': mx('PPL'),
+            # Visibility (block-min in tenths of SM, NBM-direct probabilities)
+            'VIS': mn('VIS', 100),
+            'MVV': mx('MVV'),              # P(vis <= 5 SM)
+            'IFV': mx('IFV'),              # P(vis <  3 SM)
+            'LIV': mx('LIV'),              # P(vis <  1 SM)
+            # Ceiling
+            'CIG': mn('CIG', 999),
+            'MVC': mx('MVC'),
+            'IFC': mx('IFC'),
+            'LIC': mx('LIC'),
         })
     return blocks
 
-def compute_block(block, bi, nbp):
-    if not block: return {hz: {"prob":0,"risk":0,"level":0,"color":RISK_C[0]} for hz in HAZARDS + ["COLD","HEAT"]}
+def _pack(prob, level, extra=None):
+    """Build a single-hazard result dict with risk derived from prob+level."""
+    prob = round(float(prob or 0), 1)
+    risk = risk_matrix(prob, level)
+    out = {"prob": prob, "risk": risk, "level": level, "color": RISK_C[risk]}
+    if extra: out.update(extra)
+    return out
+
+
+def compute_block(block, bi, nbp, prev_block=None):
+    """
+    Per-block hazard computation.
+
+    `prev_block` is the 3-hr block immediately before this one (or None for bi=0).
+    It is used only by FLASH_FREEZE to detect "was wet, now freezing" sequences.
+    """
+    if not block:
+        return {hz: _pack(0, 0) for hz in HAZARDS + ["COLD","HEAT"]}
+
     h = {}
-    # WIND Logic Fix
-    gst, gsd = block['GST'], block['GSD']
+
+    # ───── WIND ─────────────────────────────────────────────────────────────
+    # Gaussian on peak gust (mean=GST, std=GSD). Pick the highest-risk threshold.
+    gst, gsd = block.get('GST'), block.get('GSD')
     best_p, best_l, best_rk = 0.0, 0, 0
-    for t, l in [(65,5),(58,4),(45,3),(30,2)]:
-        p = gauss_above(gst, gsd, t)
-        rk = risk_matrix(p, l)
-        if rk > best_rk or (rk == best_rk and p > best_p): best_p, best_l, best_rk = p, l, rk
+    for thr, lvl in [(65,5), (58,4), (45,3), (30,2)]:
+        p  = gauss_above(gst, gsd, thr)
+        rk = risk_matrix(p, lvl)
+        if rk > best_rk or (rk == best_rk and p > best_p):
+            best_p, best_l, best_rk = p, lvl, rk
     h["WIND"] = {"prob": best_p, "risk": best_rk, "level": best_l, "color": RISK_C[best_rk]}
-    # LIGHTNING Fix
+
+    # ───── LIGHTNING ────────────────────────────────────────────────────────
+    # Per NOAA table: L1=<5%, L2=5-25%, L3=25-50%, L4=50-75%, L5=>75%.
+    # T01 is already P(thunder in the hour); we use the peak across the 3h window.
     t01 = float(block.get('T01') or 0)
-    ll = 5 if t01>=75 else 4 if t01>=50 else 3 if t01>=25 else 2 if t01>=5 else 1 if t01>0 else 0
-    h["LIGHTNING"] = {"prob": t01, "risk": risk_matrix(t01, ll), "level": ll, "color": RISK_C[risk_matrix(t01, ll)]}
-    for hz in ["SNOW","VISIBILITY","FZRA","FLASH_FREEZE","RAIN"]: h[hz] = {"prob":0,"risk":0,"level":0,"color":RISK_C[0]}
-    # TEMPERATURE Fix
-    tmp, tsd = block['TMP'], block['TSD'] or 3
-    cp, cl, hp, hl = 0, 0, 0, 0
-    for t, l in [(40,2),(32,3),(20,4),(10,5)]:
-        p = gauss_below(tmp, tsd, t)
-        if p >= 5.0: cp, cl = p, l
-    for t, l in [(85,1),(90,2),(95,3),(100,4),(105,5)]:
-        p = gauss_above(tmp, tsd, t)
-        if p >= 5.0: hp, hl = p, l
-    if risk_matrix(hp, hl) >= risk_matrix(cp, cl):
-        h["TEMPERATURE"] = {"prob": hp, "risk": risk_matrix(hp, hl), "level": hl, "color": RISK_C[risk_matrix(hp, hl)], "temp_type": "heat"}
+    ll  = (5 if t01 >  75 else 4 if t01 >= 50 else 3 if t01 >= 25
+           else 2 if t01 >= 5 else 1 if t01 > 0 else 0)
+    h["LIGHTNING"] = _pack(t01, ll)
+
+    # ───── PRECIP TYPE COMPOSITION ──────────────────────────────────────────
+    # NBM gives unconditional P01 and conditional type fractions (PSN, PRA, PZR).
+    # P(type) = P01 * P_type / 100.
+    p01 = float(block.get('P01') or 0)
+    psn = float(block.get('PSN') or 0)
+    pra = float(block.get('PRA') or 0)
+    pzr = float(block.get('PZR') or 0)
+    p_snow = p01 * psn / 100.0
+    p_rain = p01 * pra / 100.0
+    p_fzra = p01 * pzr / 100.0
+
+    # ───── SNOW ─────────────────────────────────────────────────────────────
+    # Per NOAA table: L2=T-0.5"/hr, L3=0.5-1"/hr, L4=1-2"/hr, L5=>2"/hr.
+    # Boundary values belong to the lower band (so 0.5 → L2, 1.0 → L3, 2.0 → L4).
+    # S01 units = 1/10 inches per hour (so S01=5 → 0.5 in/hr).
+    s01_tenths = float(block.get('S01') or 0)
+    s_in_hr    = s01_tenths / 10.0
+    snow_level = (5 if s_in_hr >  2.0
+                  else 4 if s_in_hr >  1.0
+                  else 3 if s_in_hr >  0.5
+                  else 2 if s_in_hr >  0     # trace - 0.5 in/hr
+                  else 0)
+    # Even if no measurable S01, if snow precip-type chance is nontrivial it's
+    # still possibly snowing — register at L2 (trace) so the hazard is on radar.
+    if snow_level == 0 and p_snow >= 10:
+        snow_level = 2
+    h["SNOW"] = _pack(p_snow, snow_level, {"rate_in_hr": round(s_in_hr, 2)})
+
+    # ───── RAIN ─────────────────────────────────────────────────────────────
+    # Per NOAA table: L2=0.10-0.25"/hr, L3=0.25-0.50"/hr, L4=0.50-1.00"/hr, L5=>1.00"/hr.
+    # Lower-bound values belong to the higher band (so 0.10→L2, 0.25→L3, 0.50→L4, 1.00→L5).
+    # Q01 units = 1/100 inches per hour (so Q01=10 → 0.10"/hr).
+    q01_hundredths = float(block.get('Q01') or 0)
+    r_in_hr        = q01_hundredths / 100.0
+    rain_level = (5 if r_in_hr >= 1.00
+                  else 4 if r_in_hr >= 0.50
+                  else 3 if r_in_hr >= 0.25
+                  else 2 if r_in_hr >= 0.10
+                  else 0)
+    # Type-prob fallback: if rain forecast is meaningful but Q01 didn't reach
+    # the L2 floor, still register at L2 so the hazard appears on radar.
+    if rain_level == 0 and p_rain >= 20 and r_in_hr > 0:
+        rain_level = 2
+    h["RAIN"] = _pack(p_rain, rain_level, {"rate_in_hr": round(r_in_hr, 3)})
+
+    # ───── FREEZING RAIN ────────────────────────────────────────────────────
+    # Per NOAA table: L2=Trace (expected), L3=Trace-0.01", L4=0.01-0.10", L5=>0.10".
+    # I01 units = 1/100 inches ice per hour.
+    i01_hundredths = float(block.get('I01') or 0)
+    ice_in_hr      = i01_hundredths / 100.0
+    fzra_level = (5 if ice_in_hr >  0.10
+                  else 4 if ice_in_hr >  0.01
+                  else 3 if ice_in_hr >  0
+                  else 2 if p_fzra >= 5 else 0)   # Trace expected
+    h["FZRA"] = _pack(p_fzra, fzra_level, {"rate_in_hr": round(ice_in_hr, 3)})
+
+    # ───── VISIBILITY ───────────────────────────────────────────────────────
+    # Per NOAA table: L2=3-5 SM, L3=1-3 SM, L4=0.50-1 SM, L5=<0.50 SM.
+    # NBM provides exceedance probabilities directly:
+    #   MVV = P(vis <= 5 SM)  — corresponds to L2 (or worse)
+    #   IFV = P(vis <  3 SM)  — corresponds to L3 (or worse)
+    #   LIV = P(vis <  1 SM)  — corresponds to L4 (or worse)
+    # NBM does not provide a P(vis < 0.5 SM) field; approximate using the
+    # block-min VIS as a constraint (LIV is a superset of the <0.5 event).
+    mvv = float(block.get('MVV') or 0)
+    ifv = float(block.get('IFV') or 0)
+    liv = float(block.get('LIV') or 0)
+    vis_t = block.get('VIS')   # tenths of SM (5 = 0.5 SM, 10 = 1.0 SM)
+    if vis_t is not None and vis_t < 5:
+        # Forecast already indicates < 0.5 SM — use LIV as a lower bound for VLIFR
+        vlifr_p = liv
+    elif vis_t is not None and vis_t < 10:
+        # Forecast in the 0.5–1.0 SM range — soften LIV downward
+        vlifr_p = liv * 0.5
     else:
-        h["TEMPERATURE"] = {"prob": cp, "risk": risk_matrix(cp, cl), "level": cl, "color": RISK_C[risk_matrix(cp, cl)], "temp_type": "cold"}
+        vlifr_p = 0
+    # Pick the highest-risk band across all four
+    best_vp, best_vl, best_vr = 0, 0, 0
+    for prob, lvl in [(vlifr_p, 5), (liv, 4), (ifv, 3), (mvv, 2)]:
+        rk = risk_matrix(prob, lvl)
+        if rk > best_vr or (rk == best_vr and prob > best_vp):
+            best_vp, best_vl, best_vr = prob, lvl, rk
+    h["VISIBILITY"] = {"prob": round(best_vp, 1), "risk": best_vr,
+                       "level": best_vl, "color": RISK_C[best_vr]}
+
+    # ───── FLASH FREEZE ─────────────────────────────────────────────────────
+    # Per NOAA table: L2=Wet+<36°F Tw, L3=Wet+<32°F Tw, L4=Wet+<28°F Tw, L5=Wet+<25°F Tw.
+    # (L1 = "Dry and >32°F Tw" = no flash-freeze hazard.)
+    # We treat "wet" as P(precip occurring or recently occurred) >= 30%.
+    # Joint probability: P(wet) × P(Tw <= threshold).
+    tmp, tsd = block.get('TMP'), (block.get('TSD') or 3)
+    dpt      = block.get('DPT')
+    tw       = None
+    if tmp is not None and dpt is not None:
+        # 1/3 rule approximation: Tw ≈ Tmp - (Tmp - Dpt)/3 (°F)
+        tw = tmp - (tmp - dpt) / 3.0
+    p01_prev = float((prev_block or {}).get('P01') or 0) if prev_block else 0
+    p_wet    = max(p01, p01_prev)
+
+    ff_level, ff_prob = 0, 0
+    if tw is not None and p_wet >= 30:
+        # Use Tw mean with TSD as proxy for Tw std (DSD is similar magnitude
+        # and Tw is dominated by TMP for typical T-Td spreads).
+        for thr, lvl in [(25, 5), (28, 4), (32, 3), (36, 2)]:
+            p_freeze = gauss_below(tw, tsd, thr)
+            composite = (p_wet / 100.0) * p_freeze    # both inputs in %, composite stays in %
+            rk = risk_matrix(composite, lvl)
+            if rk > risk_matrix(ff_prob, ff_level):
+                ff_prob, ff_level = composite, lvl
+    h["FLASH_FREEZE"] = _pack(ff_prob, ff_level,
+                              {"wet_pct": round(p_wet, 1),
+                               "tw_F": round(tw, 1) if tw is not None else None})
+
+    # ───── TEMPERATURE (heat OR cold) ───────────────────────────────────────
+    # Per NOAA table:
+    #   COLD: L2=32-40°F, L3=20-32°F, L4=10-20°F, L5=<10°F.  (L1 = ≥40°F.)
+    #   HEAT: L2=90-95°F, L3=95-100°F, L4=100-105°F, L5=>105°F.  (L1 = <90°F.)
+    # Walk thresholds and pick the level that yields the highest risk (matches
+    # how WIND handles its bands), not just "last threshold that fires".
+    tmp, tsd = block.get('TMP'), (block.get('TSD') or 3)
+    cp, cl, c_rk = 0, 0, 0
+    for thr, lvl in [(40, 2), (32, 3), (20, 4), (10, 5)]:
+        p = gauss_below(tmp, tsd, thr)
+        rk = risk_matrix(p, lvl)
+        if rk > c_rk or (rk == c_rk and p > cp):
+            cp, cl, c_rk = p, lvl, rk
+    hp, hl, h_rk = 0, 0, 0
+    for thr, lvl in [(90, 2), (95, 3), (100, 4), (105, 5)]:
+        p = gauss_above(tmp, tsd, thr)
+        rk = risk_matrix(p, lvl)
+        if rk > h_rk or (rk == h_rk and p > hp):
+            hp, hl, h_rk = p, lvl, rk
+    if h_rk >= c_rk:
+        h["TEMPERATURE"] = _pack(hp, hl, {"temp_type": "heat"})
+    else:
+        h["TEMPERATURE"] = _pack(cp, cl, {"temp_type": "cold"})
+
     return h
 
 def main():
@@ -227,17 +427,31 @@ def main():
     if not nbh_sec: sys.exit(1)
     nbh, nbp = parse_nbh(nbh_sec), parse_nbp(nbp_sec) if nbp_sec else {}
     blocks = make_blocks(nbh, {})
-    block_hazards = [compute_block(b, i, nbp) for i, b in enumerate(blocks)]
+    block_hazards = [compute_block(b, i, nbp, prev_block=blocks[i-1] if i > 0 else None)
+                     for i, b in enumerate(blocks)]
     threats = {}
     for hz in HAZARDS:
         idx = [i for i in range(len(blocks)) if blocks[i]]
         pk = max(idx, key=lambda i: (block_hazards[i][hz]["risk"], block_hazards[i][hz]["prob"]))
+        pk_hz = block_hazards[pk][hz]
+        # For TEMPERATURE, route to HEAT or COLD metric labels via the
+        # temp_type discriminator the compute_block sets.
+        if hz == "TEMPERATURE":
+            metric_key = "HEAT" if pk_hz.get("temp_type") == "heat" else "COLD"
+        else:
+            metric_key = hz
         threats[hz] = {
-            "prob": block_hazards[pk][hz]["prob"], "risk": block_hazards[pk][hz]["risk"], 
-            "risk_label": RISK_L[block_hazards[pk][hz]["risk"]], "color": block_hazards[pk][hz]["color"], 
-            "level": block_hazards[pk][hz]["level"], "metric": METRICS.get(hz, {}).get(block_hazards[pk][hz]["level"], ""),
-            "peak_start_fxx": blocks[pk]["start_fxx"], "peak_end_fxx": blocks[pk]["end_fxx"], "peak_utc_start": blocks[pk]["utc_start"]
+            "prob": pk_hz["prob"], "risk": pk_hz["risk"],
+            "risk_label": RISK_L[pk_hz["risk"]], "color": pk_hz["color"],
+            "level": pk_hz["level"],
+            "metric": METRICS.get(metric_key, {}).get(pk_hz["level"], ""),
+            "peak_start_fxx": blocks[pk]["start_fxx"],
+            "peak_end_fxx": blocks[pk]["end_fxx"],
+            "peak_utc_start": blocks[pk]["utc_start"],
         }
+        # Surface temp_type so the frontend can label "Heat" vs "Cold" if it wants
+        if hz == "TEMPERATURE" and "temp_type" in pk_hz:
+            threats[hz]["temp_type"] = pk_hz["temp_type"]
     # WIND OVERRIDE WITH P10/P50/P90
     p10, p50, p90 = nbp.get('G24_D1_P10'), nbp.get('G24_D1_P50'), nbp.get('G24_D1_P90')
     if p50:
