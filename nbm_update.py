@@ -443,12 +443,14 @@ def compute_block(block, bi, nbp, prev_block=None, is_peak_gust_block=False, is_
     cp, cl, c_rk = 0, 0, 0
     for thr, lvl in [(40, 2), (32, 3), (20, 4), (10, 5)]:
         p = gauss_below(cold_tmp, tsd, thr)
+        if p < 1.0: p = 0.0  # ignore sub-1% cold prob — not operationally meaningful
         rk = risk_matrix(p, lvl)
         if rk > c_rk or (rk == c_rk and p > cp):
             cp, cl, c_rk = p, lvl, rk
     hp, hl, h_rk = 0, 0, 0
     for thr, lvl in [(90, 2), (95, 3), (100, 4), (105, 5)]:
         p = gauss_above(heat_tmp, tsd, thr)
+        if p < 1.0: p = 0.0  # ignore sub-1% heat prob — not operationally meaningful
         rk = risk_matrix(p, lvl)
         if rk > h_rk or (rk == h_rk and p > hp):
             hp, hl, h_rk = p, lvl, rk
@@ -662,13 +664,31 @@ def main():
 
 
 
+    # ── POST-PROCESS: Zero out any TEMPERATURE block that didn't get a 24h override stamp.
+    # The raw block computation may produce risk=1 (LITTLE-TO-NONE) for temps like 49°F
+    # which are not operationally significant. Only blocks stamped by the 24h override
+    # (risk >= 2) should show color in the timeline.
+    for i, bh in enumerate(block_hazards):
+        if bh and bh.get('TEMPERATURE', {}).get('risk', 0) < 2:
+            bh['TEMPERATURE'] = {"prob": 0.0, "risk": 0, "level": 0, "color": RISK_C[0]}
+
+    # ── POST-PROCESS: Zero out any WIND block below risk=2 so timeline stays clean.
+    for i, bh in enumerate(block_hazards):
+        if bh and bh.get('WIND', {}).get('risk', 0) < 2:
+            bh['WIND'] = {"prob": 0.0, "risk": 0, "level": 0, "color": RISK_C[0]}
+
     nbh_hourly = []
     for fxx in range(1, 26):
         h = nbh.get(fxx, {})
         def _kt(v): return round((v or 0)*KT_TO_MPH, 1)
+        # For the peak gust hour, override GST with G24P9 so the tooltip shows
+        # the authoritative 24h peak value instead of the raw NBH mean.
+        gst_val = _kt(h.get('GST'))
+        if fxx == peak_gust_hour and g24p9 is not None:
+            gst_val = g24p9
         nbh_hourly.append({
             'fxx': fxx, 'utc': h.get('utc_hour'), 'TMP': h.get('TMP'), 'TSD': h.get('TSD'), 
-            'DPT': h.get('DPT'), 'WDR': h.get('WDR'), 'WSP': _kt(h.get('WSP')), 'GST': _kt(h.get('GST')), 
+            'DPT': h.get('DPT'), 'WDR': h.get('WDR'), 'WSP': _kt(h.get('WSP')), 'GST': gst_val,
             'GSD': _kt(h.get('GSD')), 'SKY': h.get('SKY'), 'T01': h.get('T01'), 'P01': h.get('P01'), 
             'Q01': h.get('Q01'), 'VIS': h.get('VIS'), 'LIV': h.get('LIV'), 'IFV': h.get('IFV'), 'MVV': h.get('MVV')
         })
