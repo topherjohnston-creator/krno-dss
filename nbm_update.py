@@ -534,6 +534,10 @@ def main():
         elif hz == "WIND":
             # Show wind only if risk >= 2 (MINOR or higher, i.e., >=30 mph threat)
             display = pk_hz["risk"] >= 2
+        elif hz == "TEMPERATURE":
+            # Only show if risk >= 2 AND temp is actually extreme — the 24h override
+            # will correct this if needed; raw block temp at 78F should never show.
+            display = pk_hz["risk"] >= 2
         elif hz == "RAIN":
             # Show rain if it's between 0.01" and 0.10" (trace to light)
             # Rain level corresponds to rate_in_hr in hundredths of inches
@@ -568,67 +572,84 @@ def main():
             }
 
     # ───── WIND OVERRIDE WITH 24H GUST PERCENTILE ──────────────────────────
-    # The peak gust block already used P90 for computation (see compute_block with is_peak_gust_block flag).
-    # Here we just ensure the threats dict has the 24h percentiles for display.
-    g24p5 = nbp.get('G24_D1_P5')  # 24h median gust in mph
-    if g24p5 is not None:
-        g24_std = 3  # assume modest std for percentile forecast
+    # Use G24P9 (90th pct = actual peak) for prob computation in threat matrix.
+    # Also stamp the peak gust block in the timeline with the same value.
+    g24p1  = nbp.get('G24_D1_P1')
+    g24p5  = nbp.get('G24_D1_P5')
+    g24p9  = nbp.get('G24_D1_P9')
+    if g24p9 is not None:
+        w_std = max((g24p9 - (g24p5 or g24p9)) / 1.28, 1.0)
         best_p, best_l, best_rk = 0.0, 0, 0
-        for thr, lvl in [(65, 5), (58, 4), (45, 3), (30, 2)]:
-            p = gauss_above(g24p5, g24_std, thr)
+        for thr, lvl in [(65,5),(58,4),(45,3),(30,2)]:
+            p  = gauss_above(g24p9, w_std, thr)
             rk = risk_matrix(p, lvl)
             if rk > best_rk or (rk == best_rk and p > best_p):
                 best_p, best_l, best_rk = p, lvl, rk
-        if best_rk >= 2:  # Only override if there's MINOR or higher wind risk
+        if best_rk >= 2:
             threats['WIND'].update({
                 "prob": best_p, "risk": best_rk, "risk_label": RISK_L[best_rk],
                 "color": RISK_C[best_rk], "level": best_l,
                 "metric": METRICS["WIND"].get(best_l, ""),
-                "g24_p10_mph": nbp.get('G24_D1_P1'),
-                "g24_p50_mph": nbp.get('G24_D1_P5'),
-                "g24_p90_mph": nbp.get('G24_D1_P9')
+                "g24_p10_mph": g24p1,
+                "g24_p50_mph": g24p5,
+                "g24_p90_mph": g24p9,
             })
+            # Stamp the exact same prob/risk onto the peak gust block so timeline matches
+            if 0 <= peak_gust_block_idx < len(block_hazards) and block_hazards[peak_gust_block_idx]:
+                block_hazards[peak_gust_block_idx]['WIND'] = {
+                    "prob": best_p, "risk": best_rk, "level": best_l, "color": RISK_C[best_rk]
+                }
 
     # ───── TEMPERATURE OVERRIDE WITH 24H MAX/MIN ─────────────────────────
-    # The peak max/min blocks already used P90/P1 for computation (see compute_block with is_peak_gust_block flag).
-    # Here we just ensure the threats dict has proper risk/prob labels.
-    tmax_d1 = nbp.get('TMAX_D1_P5')
-    tmin_d1 = nbp.get('TMIN_D1_P5')
-    if tmax_d1 is not None or tmin_d1 is not None:
-        # Compute heat hazard from tmax_d1
-        if tmax_d1 is not None:
-            tmax_std = 3  # assume small std for point forecast
-            hp, hl, h_rk = 0, 0, 0
-            for thr, lvl in [(90, 2), (95, 3), (100, 4), (105, 5)]:
-                p = gauss_above(tmax_d1, tmax_std, thr)
-                rk = risk_matrix(p, lvl)
-                if rk > h_rk or (rk == h_rk and p > hp):
-                    hp, hl, h_rk = p, lvl, rk
-            if h_rk >= 2:  # Only override if there's MINOR or higher heat risk
-                threats['TEMPERATURE'].update({
-                    "prob": hp, "risk": h_rk, "risk_label": RISK_L[h_rk],
-                    "color": RISK_C[h_rk], "level": hl,
-                    "metric": METRICS["HEAT"].get(hl, ""),
-                    "temp_type": "heat",
-                    "txn_24h_max": tmax_d1
-                })
-        # Compute cold hazard from tmin_d1
-        if tmin_d1 is not None:
-            tmin_std = 3
-            cp, cl, c_rk = 0, 0, 0
-            for thr, lvl in [(40, 2), (32, 3), (20, 4), (10, 5)]:
-                p = gauss_below(tmin_d1, tmin_std, thr)
-                rk = risk_matrix(p, lvl)
-                if rk > c_rk or (rk == c_rk and p > cp):
-                    cp, cl, c_rk = p, lvl, rk
-            if c_rk >= 2:  # Only override if there's MINOR or higher cold risk
-                threats['TEMPERATURE'].update({
-                    "prob": cp, "risk": c_rk, "risk_label": RISK_L[c_rk],
-                    "color": RISK_C[c_rk], "level": cl,
-                    "metric": METRICS["COLD"].get(cl, ""),
-                    "temp_type": "cold",
-                    "txn_24h_min": tmin_d1
-                })
+    # Use P90 for heat, P1 for cold. Only override if risk >= 2 (MINOR+).
+    tmax_p9 = nbp.get('TMAX_D1_P9')
+    tmin_p1 = nbp.get('TMIN_D1_P1')
+    tmax_p5 = nbp.get('TMAX_D1_P5')
+    tmin_p5 = nbp.get('TMIN_D1_P5')
+
+    # HEAT: use P90 max temp
+    if tmax_p9 is not None:
+        t_std = max((tmax_p9 - (tmax_p5 or tmax_p9)) / 1.28, 1.0)
+        hp, hl, h_rk = 0, 0, 0
+        for thr, lvl in [(90,2),(95,3),(100,4),(105,5)]:
+            p  = gauss_above(tmax_p9, t_std, thr)
+            rk = risk_matrix(p, lvl)
+            if rk > h_rk or (rk == h_rk and p > hp):
+                hp, hl, h_rk = p, lvl, rk
+        if h_rk >= 2:
+            threats['TEMPERATURE'].update({
+                "prob": hp, "risk": h_rk, "risk_label": RISK_L[h_rk],
+                "color": RISK_C[h_rk], "level": hl,
+                "metric": METRICS["HEAT"].get(hl, ""),
+                "temp_type": "heat", "txn_24h_max": tmax_p9
+            })
+            # Stamp exact same value onto peak max temp block
+            if 0 <= peak_max_block_idx < len(block_hazards) and block_hazards[peak_max_block_idx]:
+                block_hazards[peak_max_block_idx]['TEMPERATURE'] = {
+                    "prob": hp, "risk": h_rk, "level": hl, "color": RISK_C[h_rk], "temp_type": "heat"
+                }
+
+    # COLD: use P1 min temp
+    if tmin_p1 is not None:
+        t_std = max(((tmin_p5 or tmin_p1) - tmin_p1) / 1.28, 1.0)
+        cp, cl, c_rk = 0, 0, 0
+        for thr, lvl in [(40,2),(32,3),(20,4),(10,5)]:
+            p  = gauss_below(tmin_p1, t_std, thr)
+            rk = risk_matrix(p, lvl)
+            if rk > c_rk or (rk == c_rk and p > cp):
+                cp, cl, c_rk = p, lvl, rk
+        if c_rk >= 2:
+            threats['TEMPERATURE'].update({
+                "prob": cp, "risk": c_rk, "risk_label": RISK_L[c_rk],
+                "color": RISK_C[c_rk], "level": cl,
+                "metric": METRICS["COLD"].get(cl, ""),
+                "temp_type": "cold", "txn_24h_min": tmin_p1
+            })
+            # Stamp exact same value onto peak min temp block
+            if 0 <= peak_min_block_idx < len(block_hazards) and block_hazards[peak_min_block_idx]:
+                block_hazards[peak_min_block_idx]['TEMPERATURE'] = {
+                    "prob": cp, "risk": c_rk, "level": cl, "color": RISK_C[c_rk], "temp_type": "cold"
+                }
 
 
 
