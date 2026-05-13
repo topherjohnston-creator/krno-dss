@@ -128,7 +128,8 @@ def parse_nbp(sec):
     return r
 
 def make_blocks(nbh, nbs):
-    cycle_utc_h = nbh[1]['utc_hour'] - 1 if nbh.get(1) else None
+    if not nbh.get(1): return [None]*16
+    cycle_utc_h = nbh[1]['utc_hour'] - 1
     blocks = []
     for bi in range(16):
         s, e = bi * 3 + 1, bi * 3 + 3
@@ -163,7 +164,7 @@ def compute_block(block, bi, nbp):
     t01 = block.get('T01') or 0
     ll = 5 if t01>=75 else 4 if t01>=50 else 3 if t01>=25 else 2 if t01>=5 else 1 if t01>0 else 0
     h["LIGHTNING"] = {"prob": float(t01), "risk": risk_matrix(t01, ll), "level": ll, "color": RISK_C[risk_matrix(t01, ll)]}
-    # Placeholder for others to ensure keys exist
+    # Placeholder for others
     for hz in ["SNOW","VISIBILITY","FZRA","FLASH_FREEZE","RAIN"]: h[hz] = {"prob":0,"risk":0,"level":0,"color":RISK_C[0]}
     # TEMPERATURE
     tmp, tsd = block['TMP'], block['TSD'] or 3
@@ -198,7 +199,7 @@ def main():
             "color": hdata["color"], "level": hdata["level"], "metric": METRICS.get(hz, {}).get(hdata["level"], ""),
             "peak_start_fxx": blocks[pk]["start_fxx"], "peak_end_fxx": blocks[pk]["end_fxx"], "peak_utc_start": blocks[pk]["utc_start"]
         }
-    # WIND OVERRIDE
+    # WIND OVERRIDE (Probability Mapping Fix)
     p10, p50, p90 = nbp.get('G24_D1_P10'), nbp.get('G24_D1_P50'), nbp.get('G24_D1_P90')
     if p50:
         gm, gs = pct_to_gaussian(p10, p50, p90)
@@ -206,14 +207,27 @@ def main():
         for t, l in [(65,5), (58,4), (45,3), (30,2)]:
             p = gauss_above(gm, gs, t)
             rk = risk_matrix(p, l)
-            if rk >= best_rk: best_p, best_l, best_rk = p, l, rk
+            if rk > best_rk or (rk == best_rk and p > best_p):
+                best_p, best_l, best_rk = p, l, rk
         if best_rk >= threats['WIND']['risk']:
-            threats['WIND'].update({"prob": best_p, "risk": best_rk, "risk_label": RISK_L[best_rk], "color": RISK_C[best_rk], "level": best_l, "metric": METRICS["WIND"].get(best_l, ""), "g24_p50_mph": p50, "g24_p90_mph": p90})
+            threats['WIND'].update({
+                "prob": best_p, "risk": best_rk, "risk_label": RISK_L[best_rk], 
+                "color": RISK_C[best_rk], "level": best_l, "metric": METRICS["WIND"].get(best_l, ""), 
+                "g24_p50_mph": p50, "g24_p90_mph": p90
+            })
 
+    # FULL HOURLY DATA RESTORATION (Fixes Cloud/Thunder/Precip Hovers)
     nbh_hourly = []
     for fxx in range(1, 26):
         h = nbh.get(fxx, {})
-        nbh_hourly.append({'fxx': fxx, 'utc': h.get('utc_hour'), 'TMP': h.get('TMP'), 'DPT': h.get('DPT'), 'WDR': h.get('WDR'), 'WSP': round((h.get('WSP') or 0)*KT_TO_MPH, 1), 'GST': round((h.get('GST') or 0)*KT_TO_MPH, 1)})
+        def _kt(v): return round((v or 0)*KT_TO_MPH, 1)
+        nbh_hourly.append({
+            'fxx': fxx, 'utc': h.get('utc_hour'), 'TMP': h.get('TMP'), 'TSD': h.get('TSD'), 
+            'DPT': h.get('DPT'), 'WDR': h.get('WDR'), 'WSP': _kt(h.get('WSP')), 
+            'GST': _kt(h.get('GST')), 'GSD': _kt(h.get('GSD')), 'SKY': h.get('SKY'),
+            'T01': h.get('T01'), 'P01': h.get('P01'), 'Q01': h.get('Q01'),
+            'VIS': h.get('VIS'), 'MVV': h.get('MVV'), 'IFV': h.get('IFV'), 'LIV': h.get('LIV')
+        })
     
     with open('threats.json', 'w') as f: json.dump({"threats": threats, "cycle_utc_iso": f"{ds[:4]}-{ds[4:6]}-{ds[6:8]}T{hs}:00:00Z"}, f)
     with open('timeline.json', 'w') as f: json.dump({"blocks": blocks, "block_hazards": block_hazards, "nbh_hourly": nbh_hourly}, f)
