@@ -452,20 +452,68 @@ def main():
         # Surface temp_type so the frontend can label "Heat" vs "Cold" if it wants
         if hz == "TEMPERATURE" and "temp_type" in pk_hz:
             threats[hz]["temp_type"] = pk_hz["temp_type"]
-    # WIND OVERRIDE WITH P10/P50/P90
-    p10, p50, p90 = nbp.get('G24_D1_P10'), nbp.get('G24_D1_P50'), nbp.get('G24_D1_P90')
-    if p50:
-        gm, gs = pct_to_gaussian(p10, p50, p90)
-        best_p, best_l, best_rk = 0, 0, 0
-        for t, l in [(65,5), (58,4), (45,3), (30,2)]:
-            p = gauss_above(gm, gs, t)
-            rk = risk_matrix(p, l)
-            if rk > best_rk or (rk == best_rk and p > best_p): best_p, best_l, best_rk = p, l, rk
-        if best_rk >= threats['WIND']['risk']:
+
+    # ───── TEMPERATURE OVERRIDE WITH 24H MAX/MIN ─────────────────────────
+    # Use NBP's TXN (24-hour max/min) instead of block averages for the
+    # threat matrix, since they're more accurate. The peak timing still comes
+    # from the hourly block (when it actually occurs during the day).
+    tmax_d1 = nbp.get('TMAX_D1_P50')
+    tmin_d1 = nbp.get('TMIN_D1_P50')
+    if tmax_d1 is not None or tmin_d1 is not None:
+        # Compute heat hazard from tmax_d1
+        if tmax_d1 is not None:
+            tmax_std = 3  # assume small std for point forecast
+            hp, hl, h_rk = 0, 0, 0
+            for thr, lvl in [(90, 2), (95, 3), (100, 4), (105, 5)]:
+                p = gauss_above(tmax_d1, tmax_std, thr)
+                rk = risk_matrix(p, lvl)
+                if rk > h_rk or (rk == h_rk and p > hp):
+                    hp, hl, h_rk = p, lvl, rk
+            if h_rk > 0:  # Only override if there's actual heat risk
+                threats['TEMPERATURE'].update({
+                    "prob": hp, "risk": h_rk, "risk_label": RISK_L[h_rk],
+                    "color": RISK_C[h_rk], "level": hl,
+                    "metric": METRICS["HEAT"].get(hl, ""),
+                    "temp_type": "heat",
+                    "txn_24h_max": tmax_d1
+                })
+        # Compute cold hazard from tmin_d1
+        if tmin_d1 is not None:
+            tmin_std = 3
+            cp, cl, c_rk = 0, 0, 0
+            for thr, lvl in [(40, 2), (32, 3), (20, 4), (10, 5)]:
+                p = gauss_below(tmin_d1, tmin_std, thr)
+                rk = risk_matrix(p, lvl)
+                if rk > c_rk or (rk == c_rk and p > cp):
+                    cp, cl, c_rk = p, lvl, rk
+            if c_rk > 0:  # Only override if there's actual cold risk
+                threats['TEMPERATURE'].update({
+                    "prob": cp, "risk": c_rk, "risk_label": RISK_L[c_rk],
+                    "color": RISK_C[c_rk], "level": cl,
+                    "metric": METRICS["COLD"].get(cl, ""),
+                    "temp_type": "cold",
+                    "txn_24h_min": tmin_d1
+                })
+
+    # ───── WIND OVERRIDE WITH 24H GUST PERCENTILE ──────────────────────────
+    # Use NBP's G24P5 (24-hour gust percentile) instead of 3-hour block average,
+    # since it's more accurate and matches operational briefing data. The peak
+    # timing still comes from the hourly block (when the peak gust occurs).
+    g24p5 = nbp.get('G24_D1_P50')  # 24h median gust in mph
+    if g24p5 is not None:
+        g24_std = 3  # assume modest std for percentile forecast
+        best_p, best_l, best_rk = 0.0, 0, 0
+        for thr, lvl in [(65, 5), (58, 4), (45, 3), (30, 2)]:
+            p = gauss_above(g24p5, g24_std, thr)
+            rk = risk_matrix(p, lvl)
+            if rk > best_rk or (rk == best_rk and p > best_p):
+                best_p, best_l, best_rk = p, lvl, rk
+        if best_rk >= threats['WIND']['risk']:  # Only upgrade, don't downgrade
             threats['WIND'].update({
-                "prob": best_p, "risk": best_rk, "risk_label": RISK_L[best_rk], "color": RISK_C[best_rk], 
-                "level": best_l, "metric": METRICS["WIND"].get(best_l, ""), 
-                "g24_p10_mph": p10, "g24_p50_mph": p50, "g24_p90_mph": p90
+                "prob": best_p, "risk": best_rk, "risk_label": RISK_L[best_rk],
+                "color": RISK_C[best_rk], "level": best_l,
+                "metric": METRICS["WIND"].get(best_l, ""),
+                "g24_d1_p50_mph": g24p5  # For reference in frontend
             })
 
     nbh_hourly = []
