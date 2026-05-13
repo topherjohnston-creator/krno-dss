@@ -746,7 +746,7 @@
             if (liveMetar && liveMetar.wdir != null && (liveMetar.wspd || liveMetar.wgst)) {
                 var wDir = liveMetar.wdir;
                 var spd  = (liveMetar.wgst > liveMetar.wspd) ? liveMetar.wgst : (liveMetar.wspd || 0);
-                var RWYS = [{name:'16R/34L',hdg:160},{name:'17L/35R',hdg:170},{name:'7/25',hdg:80}];
+                var RWYS = [{name:'17R/35L',hdg:160},{name:'17L/35R',hdg:170},{name:'8/26',hdg:80}];
                 out.push('<div style="font-size:0.6rem;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:0.06em;margin-top:6px;margin-bottom:3px;border-top:1px solid #27272a;padding-top:5px;">Current Runway Crosswinds</div>');
                 for (var r = 0; r < RWYS.length; r++) {
                     var diff = ((wDir - RWYS[r].hdg) + 360) % 360;
