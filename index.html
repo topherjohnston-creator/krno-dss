@@ -694,36 +694,46 @@
 
         // Wind-specific sparkline (speed + gust dual bar)
         window.showWindForecast = function() {
-            var out = [];
-            out.push('<div style="font-weight:800;font-size:0.7rem;letter-spacing:0.04em;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:6px;">Wind Forecast</div>');
+    var out = [];
+    out.push('<div style="font-weight:800;font-size:0.7rem;letter-spacing:0.04em;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:6px;">24-HR WIND GUST OUTLOOK</div>');
 
-            // G24 24-hr max gust (mph, from threats.json)
-            var g24p50 = (refsThreats && refsThreats.WIND) ? refsThreats.WIND.g24_p50_mph : null;
-            var g24p90 = (refsThreats && refsThreats.WIND) ? refsThreats.WIND.g24_p90_mph : null;
+    // Pull percentile data from refsThreats (provided by NBP logic in backend)
+    var p10 = (refsThreats && refsThreats.WIND) ? refsThreats.WIND.g24_p10_mph : null; // Note: Ensure backend exports P10
+    var p50 = (refsThreats && refsThreats.WIND) ? refsThreats.WIND.g24_p50_mph : null;
+    var p90 = (refsThreats && refsThreats.WIND) ? refsThreats.WIND.g24_p90_mph : null;
 
-            if (g24p50 != null && g24p50 > 0) {
-                var c50 = deciColormap('WIND', g24p50) || '#fbbf24';
-                var c90 = deciColormap('WIND', g24p90 || g24p50) || '#f97316';
-                out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:2px;"><span style="color:#a1a1aa;">24-hr Max Gust (P50)</span><span style="color:' + c50 + ';font-weight:800;">' + Math.round(g24p50) + ' mph</span></div>');
-                out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:4px;"><span style="color:#a1a1aa;">24-hr Max Gust (P90)</span><span style="color:' + c90 + ';font-weight:800;">' + Math.round(g24p90 || g24p50) + ' mph</span></div>');
+    if (p50 != null) {
+        // High End (10% Chance of exceeding)
+        if (p90) {
+            var c90 = deciColormap('WIND', p90);
+            out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:2px;"><span style="color:#f87171;font-weight:700;">HIGH END (10% CHANCE)</span><span style="color:' + c90 + ';font-weight:800;">' + Math.round(p90) + ' mph</span></div>');
+        }
+        
+        // Middle of the Road (50% Chance / Expected)
+        var c50 = deciColormap('WIND', p50);
+        out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:2px;"><span style="color:#fbbf24;font-weight:700;">EXPECTED (50% CHANCE)</span><span style="color:' + c50 + ';font-weight:800;">' + Math.round(p50) + ' mph</span></div>');
 
-                // Peak P90 timing from nbhHourly
-                if (nbhHourly && nbhHourly.length > 0) {
-                    var best = -1, bestIdx = 0;
-                    for (var i = 0; i < nbhHourly.length; i++) {
-                        var v = (nbhHourly[i].GST || 0) + 1.28 * (nbhHourly[i].GSD || 0);
-                        if (v > best) { best = v; bestIdx = i; }
-                    }
-                    var baseMs = cycleStartTime || Date.now();
-                    var pd = new Date(baseMs + ((nbhHourly[bestIdx].fxx || bestIdx + 1) * 3600000));
-                    var hh = pd.getHours(); var ap = hh >= 12 ? 'P' : 'A';
-                    var dy = pd.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
-                    var peakStr = dy + ' ' + (hh % 12 || 12) + ap;
-                    out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;padding-bottom:5px;margin-bottom:5px;border-bottom:1px solid #27272a;"><span style="color:#a1a1aa;">Peak P90 timing</span><span style="color:#fbbf24;font-weight:800;">' + peakStr + '</span></div>');
-                }
-            } else {
-                out.push('<div style="color:#71717a;font-size:0.65rem;font-family:monospace;margin-bottom:6px;">G24 loading — next refresh in ~15 min</div>');
+        // Low End (90% Chance of exceeding)
+        if (p10) {
+            var c10 = deciColormap('WIND', p10);
+            out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:4px;"><span style="color:#60a5fa;font-weight:700;">LOW END (90% CHANCE)</span><span style="color:' + c10 + ';font-weight:800;">' + Math.round(p10) + ' mph</span></div>');
+        }
+
+        // Peak timing logic (restored)
+        if (nbhHourly && nbhHourly.length > 0) {
+            var best = -1, bestIdx = 0;
+            for (var i = 0; i < nbhHourly.length; i++) {
+                var v = (nbhHourly[i].GST || 0) + 1.28 * (nbhHourly[i].GSD || 0);
+                if (v > best) { best = v; bestIdx = i; }
             }
+            var baseMs = cycleStartTime || Date.now();
+            var pd = new Date(baseMs + ((nbhHourly[bestIdx].fxx || bestIdx + 1) * 3600000));
+            var peakStr = pd.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase() + ' ' + (pd.getHours() % 12 || 12) + (pd.getHours() >= 12 ? 'P' : 'A');
+            out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;padding-top:4px;margin-top:4px;border-top:1px solid #27272a;"><span style="color:#a1a1aa;">TIME OF PEAK GUST</span><span style="color:#fbbf24;font-weight:800;">' + peakStr + '</span></div>');
+        }
+    } else {
+        out.push('<div style="color:#71717a;font-size:0.65rem;font-family:monospace;">Probabilistic distribution loading...</div>');
+    }
 
             // Sparkline
             if (nbhHourly && nbhHourly.length > 0) {
