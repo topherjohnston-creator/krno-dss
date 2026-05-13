@@ -2,7 +2,7 @@ name: Update NBM Hazard Data
 
 on:
   schedule:
-    - cron: '0 * * * *'   # Every hour on the hour
+    - cron: '*/5 * * * *'   # Every 5 minutes
   workflow_dispatch:        # Manual trigger from GitHub Actions tab
 
 concurrency:
