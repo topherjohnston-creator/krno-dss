@@ -493,49 +493,6 @@ def main():
                 "peak_utc_start": blocks[pk]["utc_start"],
             }
 
-    # ───── TEMPERATURE OVERRIDE WITH 24H MAX/MIN ─────────────────────────
-    # Use NBP's TXN (24-hour max/min) instead of block averages for the
-    # threat matrix, since they're more accurate. The peak timing still comes
-    # from the hourly block (when it actually occurs during the day).
-    # Only show if risk >= 2 (MINOR or higher), not LITTLE-TO-NONE (risk=1).
-    tmax_d1 = nbp.get('TMAX_D1_P50')
-    tmin_d1 = nbp.get('TMIN_D1_P50')
-    if tmax_d1 is not None or tmin_d1 is not None:
-        # Compute heat hazard from tmax_d1
-        if tmax_d1 is not None:
-            tmax_std = 3  # assume small std for point forecast
-            hp, hl, h_rk = 0, 0, 0
-            for thr, lvl in [(90, 2), (95, 3), (100, 4), (105, 5)]:
-                p = gauss_above(tmax_d1, tmax_std, thr)
-                rk = risk_matrix(p, lvl)
-                if rk > h_rk or (rk == h_rk and p > hp):
-                    hp, hl, h_rk = p, lvl, rk
-            if h_rk >= 2:  # Only override if there's MINOR or higher heat risk
-                threats['TEMPERATURE'].update({
-                    "prob": hp, "risk": h_rk, "risk_label": RISK_L[h_rk],
-                    "color": RISK_C[h_rk], "level": hl,
-                    "metric": METRICS["HEAT"].get(hl, ""),
-                    "temp_type": "heat",
-                    "txn_24h_max": tmax_d1
-                })
-        # Compute cold hazard from tmin_d1
-        if tmin_d1 is not None:
-            tmin_std = 3
-            cp, cl, c_rk = 0, 0, 0
-            for thr, lvl in [(40, 2), (32, 3), (20, 4), (10, 5)]:
-                p = gauss_below(tmin_d1, tmin_std, thr)
-                rk = risk_matrix(p, lvl)
-                if rk > c_rk or (rk == c_rk and p > cp):
-                    cp, cl, c_rk = p, lvl, rk
-            if c_rk >= 2:  # Only override if there's MINOR or higher cold risk
-                threats['TEMPERATURE'].update({
-                    "prob": cp, "risk": c_rk, "risk_label": RISK_L[c_rk],
-                    "color": RISK_C[c_rk], "level": cl,
-                    "metric": METRICS["COLD"].get(cl, ""),
-                    "temp_type": "cold",
-                    "txn_24h_min": tmin_d1
-                })
-
     # ───── WIND OVERRIDE WITH 24H GUST PERCENTILE ──────────────────────────
     # Use NBP's G24P5 (24-hour gust percentile) instead of 3-hour block average,
     # since it's more accurate and matches operational briefing data. The peak
@@ -549,18 +506,24 @@ def main():
             rk = risk_matrix(p, lvl)
             if rk > best_rk or (rk == best_rk and p > best_p):
                 best_p, best_l, best_rk = p, lvl, rk
-        if best_rk >= threats['WIND']['risk']:  # Only upgrade, don't downgrade
+        if best_rk >= 2:  # Only override if there's MINOR or higher wind risk
             threats['WIND'].update({
                 "prob": best_p, "risk": best_rk, "risk_label": RISK_L[best_rk],
                 "color": RISK_C[best_rk], "level": best_l,
                 "metric": METRICS["WIND"].get(best_l, ""),
                 "g24_d1_p50_mph": g24p5  # For reference in frontend
             })
-            # Also update the peak block in timeline so it displays the 24h value
-            pk_wind = max([i for i in range(len(blocks)) if blocks[i]], 
-                         key=lambda i: (block_hazards[i]['WIND']['risk'], 
-                                       block_hazards[i]['WIND']['prob']))
-            block_hazards[pk_wind]['WIND'] = threats['WIND'].copy()
+            # Find the block containing the actual peak gust hour (highest GST in NBH)
+            peak_gust_hour = 1
+            peak_gust_val = 0
+            for fxx, hdata in nbh.items():
+                if hdata and hdata.get('GST') and hdata['GST'] > peak_gust_val:
+                    peak_gust_val = hdata['GST']
+                    peak_gust_hour = fxx
+            # Determine which block this hour belongs to (block bi spans fxx 3*bi+1 to 3*bi+3)
+            pk_block_idx = (peak_gust_hour - 1) // 3
+            if 0 <= pk_block_idx < len(block_hazards) and block_hazards[pk_block_idx]:
+                block_hazards[pk_block_idx]['WIND'] = threats['WIND'].copy()
 
     # ───── TEMPERATURE OVERRIDE WITH 24H MAX/MIN ─────────────────────────
     # Use NBP's TXN (24-hour max/min) instead of block averages for the
@@ -587,6 +550,16 @@ def main():
                     "temp_type": "heat",
                     "txn_24h_max": tmax_d1
                 })
+                # Find the block containing the actual peak MAX temp hour
+                peak_max_hour = 1
+                peak_max_val = -999
+                for fxx, hdata in nbh.items():
+                    if hdata and hdata.get('TMP') and hdata['TMP'] > peak_max_val:
+                        peak_max_val = hdata['TMP']
+                        peak_max_hour = fxx
+                pk_max_block_idx = (peak_max_hour - 1) // 3
+                if 0 <= pk_max_block_idx < len(block_hazards) and block_hazards[pk_max_block_idx]:
+                    block_hazards[pk_max_block_idx]['TEMPERATURE'] = threats['TEMPERATURE'].copy()
         # Compute cold hazard from tmin_d1
         if tmin_d1 is not None:
             tmin_std = 3
@@ -604,15 +577,18 @@ def main():
                     "temp_type": "cold",
                     "txn_24h_min": tmin_d1
                 })
-        # Update peak block in timeline
-        try:
-            pk_temp = max([i for i in range(len(blocks)) if blocks[i]], 
-                         key=lambda i: (block_hazards[i]['TEMPERATURE']['risk'], 
-                                       block_hazards[i]['TEMPERATURE']['prob']))
-            if threats['TEMPERATURE']['risk'] > 0:
-                block_hazards[pk_temp]['TEMPERATURE'] = threats['TEMPERATURE'].copy()
-        except (ValueError, IndexError):
-            pass  # No valid blocks to update
+                # Find the block containing the actual peak MIN temp hour
+                peak_min_hour = 1
+                peak_min_val = 999
+                for fxx, hdata in nbh.items():
+                    if hdata and hdata.get('TMP') and hdata['TMP'] < peak_min_val:
+                        peak_min_val = hdata['TMP']
+                        peak_min_hour = fxx
+                pk_min_block_idx = (peak_min_hour - 1) // 3
+                if 0 <= pk_min_block_idx < len(block_hazards) and block_hazards[pk_min_block_idx]:
+                    block_hazards[pk_min_block_idx]['TEMPERATURE'] = threats['TEMPERATURE'].copy()
+
+
 
     nbh_hourly = []
     for fxx in range(1, 26):
