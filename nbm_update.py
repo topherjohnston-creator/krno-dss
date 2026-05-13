@@ -50,12 +50,71 @@ def pct_to_gaussian(p10, p50, p90):
     std = (p90 - p50) / 1.28 if (p90 and p90 > p50) else (p50 - p10) / 1.28 if (p10 and p50 > p10) else 3.0
     return p50, max(std, 0.5)
 
-def parse_row(label, section):
+def _detect_nbm_format(section):
+    """
+    Identify NBM product layout from the section header.
+    Returns (value_start_col, field_width, has_pipe_delim).
+      NBH / NBS : labels in cols 1-4, values start col 5, width 3
+      NBE / NBX / NBP : labels in cols 1-6, values start col 7, width 4, with | day separators
+    """
+    head = section[:600]
+    if 'NBE GUIDANCE' in head or 'NBX GUIDANCE' in head or 'NBP GUIDANCE' in head:
+        return 7, 4, True
+    return 5, 3, False
+
+_NBM_SENTINELS = {-99, 999, -88, 888}
+
+def _nbm_to_int(s):
+    if not s:
+        return None
+    try:
+        v = int(s)
+        return None if v in _NBM_SENTINELS else v
+    except ValueError:
+        return None
+
+def parse_row(label, section, n_cols=None):
+    """
+    Parse one labeled row from an NBM bulletin section using fixed-width
+    column chunking. Auto-detects NBH/NBS vs NBE/NBX/NBP format from header.
+
+    Returns a list of ints/None, aligned to the UTC row's columns. If n_cols
+    is supplied, the result is padded or truncated to exactly that length.
+    Sentinels (-88, -99, 888, 999) become None. Blank slots (sparse rows like
+    P06, T06, TXN) also become None — their valid-time alignment is preserved.
+    """
+    value_start, width, has_pipe = _detect_nbm_format(section)
+
     for line in section.split('\n'):
-        s = line.strip()
-        if s.startswith(label + ' ') or s.startswith(label + '\t'):
-            return [int(x) for x in re.findall(r'-?\d+', s[len(label):])]
-    return []
+        if len(line) < value_start:
+            continue
+        prefix = line[:value_start]
+        tokens = prefix.split()
+        if not tokens or tokens[0] != label:
+            continue
+
+        data = line[value_start:]
+        if has_pipe:
+            data = data.replace('|', ' ')
+
+        vals = [_nbm_to_int(data[i:i+width].strip())
+                for i in range(0, len(data), width)]
+
+        if n_cols is not None:
+            if len(vals) < n_cols:
+                vals = vals + [None] * (n_cols - len(vals))
+            else:
+                vals = vals[:n_cols]
+        return vals
+
+    return [None] * n_cols if n_cols is not None else []
+
+def _utc_col_count(section):
+    """Return the true UTC column count for this section (drops trailing-whitespace artifacts)."""
+    utc = parse_row('UTC', section)
+    while utc and utc[-1] is None:
+        utc.pop()
+    return len(utc), utc
 
 def get_cycle(btype):
     now = datetime.now(timezone.utc)
@@ -79,32 +138,34 @@ def fetch_station(url):
     return r.text[idx: end if end > 0 else idx + 5000]
 
 def parse_nbh(sec):
-    utc_row = []
-    for line in sec.split('\n'):
-        if line.strip().startswith('UTC '):
-            utc_row = [int(x) for x in re.findall(r'\d+', line[4:])]
-            break
-    rows = {}
-    for el in ['TMP','TSD','DPT','DSD','WDR','WSP','GST','GSD','SKY','P01','Q01','T01','VIS','MVV','IFV','LIV']:
-        v = parse_row(el, sec)
-        if v: rows[el] = v
+    n_cols, utc_row = _utc_col_count(sec)
+    elements = ['TMP','TSD','DPT','DSD','WDR','WSP','GST','GSD','SKY',
+                'P01','Q01','T01','VIS','MVV','IFV','LIV']
+    rows = {el: parse_row(el, sec, n_cols=n_cols) for el in elements}
     data = {}
-    for i, uh in enumerate(utc_row[:48]):
-        fxx = i + 1
-        entry = {'utc_hour': uh, 'fxx': fxx}
+    # NBH column 0 is the cycle hour itself (fxx=0). Map fxx 1..N to columns 1..N.
+    for i in range(1, min(n_cols, 49)):
+        entry = {'utc_hour': utc_row[i], 'fxx': i}
         for el, vals in rows.items():
-            if i < len(vals): entry[el] = None if vals[i] in (-99, 999, -88, 888) else vals[i]
-        data[fxx] = entry
+            entry[el] = vals[i]   # already None for sentinels/blanks
+        data[i] = entry
     return data
 
 def parse_nbp(sec):
+    n_cols, _utc = _utc_col_count(sec)
     r = {}
-    g24p1, g24p5, g24p9 = parse_row('G24P1', sec), parse_row('G24P5', sec), parse_row('G24P9', sec)
-    txnp1, txnp5, txnp9 = parse_row('TXNP1', sec), parse_row('TXNP5', sec), parse_row('TXNP9', sec)
-    if len(txnp5) >= 2:
-        r.update({'TMAX_D1_P10': txnp1[0], 'TMAX_D1_P50': txnp5[0], 'TMAX_D1_P90': txnp9[0], 'TMIN_D1_P50': txnp5[1]})
-    for pct, row in [(10,g24p1),(50,g24p5),(90,g24p9)]:
-        if len(row) >= 1: r[f'G24_D1_P{pct}'] = round(row[0] * KT_TO_MPH, 1)
+    g24p1 = parse_row('G24P1', sec, n_cols=n_cols)
+    g24p5 = parse_row('G24P5', sec, n_cols=n_cols)
+    g24p9 = parse_row('G24P9', sec, n_cols=n_cols)
+    txnp1 = parse_row('TXNP1', sec, n_cols=n_cols)
+    txnp5 = parse_row('TXNP5', sec, n_cols=n_cols)
+    txnp9 = parse_row('TXNP9', sec, n_cols=n_cols)
+    if len(txnp5) >= 2 and txnp5[0] is not None:
+        r.update({'TMAX_D1_P10': txnp1[0], 'TMAX_D1_P50': txnp5[0],
+                  'TMAX_D1_P90': txnp9[0], 'TMIN_D1_P50': txnp5[1]})
+    for pct, row in [(10, g24p1), (50, g24p5), (90, g24p9)]:
+        if row and row[0] is not None:
+            r[f'G24_D1_P{pct}'] = round(row[0] * KT_TO_MPH, 1)
     return r
 
 def make_blocks(nbh, nbs):
