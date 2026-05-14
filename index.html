@@ -1824,14 +1824,29 @@
 
                 // --- FETCH LIVE DATA (WITH NGROK BYPASS HEADER) ---
                 const fetchOpts = { headers: { "ngrok-skip-browser-warning": "true" } };
-                
+
+                // ?test=<scenario> loads test JSON files instead of live data
+                const _testMode = new URLSearchParams(window.location.search).get('test');
+                const _threatsFile  = _testMode ? `threats_${_testMode}.json`  : 'threats.json';
+                const _timelineFile = _testMode ? `timeline_${_testMode}.json` : 'timeline.json';
+                if (_testMode) {
+                    const banner = document.getElementById('test-mode-banner');
+                    if (!banner) {
+                        const b = document.createElement('div');
+                        b.id = 'test-mode-banner';
+                        b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#7c3aed;color:#fff;font-family:monospace;font-size:0.7rem;font-weight:800;text-align:center;padding:3px;letter-spacing:0.1em;';
+                        b.textContent = `⚠ TEST MODE: ${_testMode.toUpperCase()} — NOT LIVE DATA`;
+                        document.body.prepend(b);
+                    }
+                }
+
                 // GitHub Actions writes threats.json and timeline.json every hour
                 const cacheBust = '?cb=' + Date.now();
                 const [metarResp, alertsResp, threatsResp, timelineResp] = await Promise.allSettled([
                     fetchMETAR(),
-                    fetchAlerts(),
-                    fetch('threats.json'  + cacheBust).then(r => r.json()),
-                    fetch('timeline.json' + cacheBust).then(r => r.json())
+                    _testMode ? Promise.resolve(null) : fetchAlerts(),
+                    fetch(_threatsFile  + cacheBust).then(r => r.json()),
+                    fetch(_timelineFile + cacheBust).then(r => r.json())
                 ]);
 
                 // Removed local declarations of refsThreats and refsTimeline here
@@ -1842,6 +1857,15 @@
                     window._tmin_d1_p5 = threatsResp.value.tmin_d1_p5 ?? null;
                     window._tmax_d2_p5 = threatsResp.value.tmax_d2_p5 ?? null;
                     window._tmin_d2_p5 = threatsResp.value.tmin_d2_p5 ?? null;
+                    // In test mode, inject fake alerts from the scenario JSON
+                    if (_testMode && Array.isArray(threatsResp.value._alerts)) {
+                        liveAlerts = threatsResp.value._alerts.map(a => ({
+                            event:    a.event,
+                            headline: a.headline,
+                            startHr:  a.startHr,
+                            endHr:    a.endHr,
+                        })).filter(a => a.endHr > 0);
+                    }
                     document.getElementById('refs-status')?.remove();
                     // cycle_utc_iso is "YYYY-MM-DDTHH:00:00Z" — parse as UTC cycle start
                     // peak_start_fxx values in threats.json are offsets from this time
