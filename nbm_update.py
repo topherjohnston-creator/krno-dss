@@ -37,13 +37,13 @@ def risk_matrix(prob, level):
     else:            pr = 0
     return _MATRIX[pr][level - 1]
 
-RISK_C = {0:"#3f3f46",1:"#e2f0cb",2:"#ffeb3b",3:"#ff9800",4:"#f44336",5:"#9c27b0"}
+RISK_C = {0:"#3f3f46",1:"#6b7280",2:"#ffeb3b",3:"#ff9800",4:"#f44336",5:"#9c27b0"}
 RISK_L = {0:"NONE",1:"LITTLE TO NONE",2:"MINOR",3:"MODERATE",4:"MAJOR",5:"EXTREME"}
 HAZARDS = ["WIND","LIGHTNING","SNOW","VISIBILITY","FZRA","FLASH_FREEZE","RAIN","TEMPERATURE"]
 
 METRICS = {
     "WIND":        {2:"30-45 mph",    3:"45-58 mph",    4:"58-65 mph",   5:">65 mph"},
-    "SNOW":        {2:"T-0.5 in/hr",  3:"0.5-1 in/hr",  4:"1-2 in/hr",   5:">2 in/hr"},
+    "SNOW":        {2:"Trace-2in/24hr", 3:"2-4in/12hr or 3-6in/24hr", 4:"4+in/12hr or 6+in/24hr", 5:"Well above warning"},
     "LIGHTNING":   {1:"<5%",          2:"5-25%",        3:"25-50%",      4:"50-75%",     5:">75%"},
     "VISIBILITY":  {2:"3-5 SM",       3:"1-3 SM",       4:"0.5-1 SM",    5:"<0.5 SM"},
     "RAIN":        {2:"0.10-0.25 in/hr", 3:"0.25-0.50 in/hr", 4:"0.50-1.00 in/hr", 5:">1.00 in/hr"},
@@ -173,6 +173,7 @@ def parse_nbh(sec):
     return data
 
 def parse_nbp(sec):
+    if not sec: return {}
     n_cols, _utc = _utc_col_count(sec)
     r = {}
     g24p1 = parse_row('G24P1', sec, n_cols=n_cols)
@@ -183,73 +184,138 @@ def parse_nbp(sec):
     txnp5 = parse_row('TXNP5', sec, n_cols=n_cols)
     txnp7 = parse_row('TXNP7', sec, n_cols=n_cols)
     txnp9 = parse_row('TXNP9', sec, n_cols=n_cols)
-    
-    # Temperature: store all percentiles for max and min
-    if len(txnp5) >= 2 and txnp5[0] is not None:
-        r.update({
-            'TMAX_D1_P1': txnp1[0], 'TMAX_D1_P5': txnp5[0],
-            'TMAX_D1_P7': txnp7[0], 'TMAX_D1_P9': txnp9[0],
-            'TMIN_D1_P1': txnp1[1], 'TMIN_D1_P5': txnp5[1],
-            'TMIN_D1_P7': txnp7[1], 'TMIN_D1_P9': txnp9[1],
-        })
-    
-    # Wind gust: convert to mph and store all percentiles
-    for pct, row in [(1, g24p1), (5, g24p5), (7, g24p7), (9, g24p9)]:
-        if row and row[0] is not None:
+    s24p1 = parse_row('S24P1', sec, n_cols=n_cols)
+    s24p5 = parse_row('S24P5', sec, n_cols=n_cols)
+    s24p9 = parse_row('S24P9', sec, n_cols=n_cols)
+
+    # ── Day 1 (col 0 = max, col 1 = min) ──
+    if txnp5 and len(txnp5) > 0 and txnp5[0] is not None:
+        r.update({'TMAX_D1_P1': txnp1[0], 'TMAX_D1_P5': txnp5[0],
+                  'TMAX_D1_P7': txnp7[0], 'TMAX_D1_P9': txnp9[0]})
+    if txnp5 and len(txnp5) > 1 and txnp5[1] is not None:
+        r.update({'TMIN_D1_P1': txnp1[1], 'TMIN_D1_P5': txnp5[1],
+                  'TMIN_D1_P7': txnp7[1], 'TMIN_D1_P9': txnp9[1]})
+    for pct, row in [(1,g24p1),(5,g24p5),(7,g24p7),(9,g24p9)]:
+        if row and len(row) > 0 and row[0] is not None:
             r[f'G24_D1_P{pct}'] = round(row[0] * KT_TO_MPH, 1)
-    
+    for pct, row in [(1,s24p1),(5,s24p5),(9,s24p9)]:
+        if row and len(row) > 0 and row[0] is not None:
+            r[f'S24_D1_P{pct}'] = round(row[0] / 10.0, 2)
+
+    # ── Day 2 (col 2 = max, col 3 = min; G24/S24 col 1) ──
+    if txnp5 and len(txnp5) > 2 and txnp5[2] is not None:
+        r.update({'TMAX_D2_P1': txnp1[2], 'TMAX_D2_P5': txnp5[2],
+                  'TMAX_D2_P7': txnp7[2], 'TMAX_D2_P9': txnp9[2]})
+    if txnp5 and len(txnp5) > 3 and txnp5[3] is not None:
+        r.update({'TMIN_D2_P1': txnp1[3], 'TMIN_D2_P5': txnp5[3],
+                  'TMIN_D2_P7': txnp7[3], 'TMIN_D2_P9': txnp9[3]})
+    for pct, row in [(1,g24p1),(5,g24p5),(7,g24p7),(9,g24p9)]:
+        if row and len(row) > 1 and row[1] is not None:
+            r[f'G24_D2_P{pct}'] = round(row[1] * KT_TO_MPH, 1)
+    for pct, row in [(1,s24p1),(5,s24p5),(9,s24p9)]:
+        if row and len(row) > 1 and row[1] is not None:
+            r[f'S24_D2_P{pct}'] = round(row[1] / 10.0, 2)
+
     return r
 
+
+def parse_nbs(sec):
+    """Parse NBS (3-hourly, hours 6-72) bulletin into a dict keyed by fxx."""
+    if not sec: return {}
+    n_cols, utc_row = _utc_col_count(sec)
+    elements = ['TMP','TSD','DPT','DSD','WDR','WSP','GST','GSD','SKY',
+                'P06','Q06','T03','S06','I06',
+                'PSN','PRA','PZR','PPL',
+                'VIS','IFV','MVV']
+    rows = {el: parse_row(el, sec, n_cols=n_cols) for el in elements}
+    data = {}
+    # NBS columns map to fxx 5,8,11...71 (3-hr steps starting at fhr 5)
+    for i in range(n_cols):
+        # Derive fxx from the FHR row if available, else compute
+        fxx_val = None
+        fhr_row = parse_row('FHR', sec, n_cols=n_cols)
+        if fhr_row and i < len(fhr_row) and fhr_row[i] is not None:
+            fxx_val = int(fhr_row[i])
+        if fxx_val is None:
+            fxx_val = 5 + i * 3
+        entry = {'utc_hour': utc_row[i] if i < len(utc_row) else None, 'fxx': fxx_val}
+        for el, vals in rows.items():
+            entry[el] = vals[i] if i < len(vals) else None
+        data[fxx_val] = entry
+    return data
+
 def make_blocks(nbh, nbs):
+    """Build 16 × 3-hr blocks. Blocks 0-7 from NBH (fxx 1-24), blocks 8-15 from NBS (fxx 26-48)."""
     if not nbh.get(1): return [None]*16
     blocks = []
     for bi in range(16):
         s, e = bi * 3 + 1, bi * 3 + 3
-        nbh_hrs = [nbh.get(f) for f in range(s, e + 1) if nbh.get(f)]
-        if not nbh_hrs: blocks.append(None); continue
-        def av(k):
-            v = [h[k] for h in nbh_hrs if h.get(k) is not None]
-            return sum(v)/len(v) if v else None
-        def mx(k, default=0):
-            v = [h[k] for h in nbh_hrs if h.get(k) is not None]
-            return max(v) if v else default
-        def mn(k, default=None):
-            v = [h[k] for h in nbh_hrs if h.get(k) is not None]
-            return min(v) if v else default
-        blocks.append({
-            'start_fxx': s, 'end_fxx': e, 'utc_start': nbh_hrs[0]['utc_hour'],
-            # Temperature / moisture
-            'TMP': av('TMP'), 'TSD': av('TSD'),
-            'DPT': av('DPT'), 'DSD': av('DSD'),
-            # Wind (knots -> mph)
-            'WDR': nbh_hrs[0].get('WDR'),
-            'WSP': round((av('WSP') or 0)*KT_TO_MPH, 1),
-            'GST': round((av('GST') or 0)*KT_TO_MPH, 1),
-            'GSD': round((av('GSD') or 3)*KT_TO_MPH, 1),
-            # Sky / convection
-            'SKY': av('SKY'),
-            'T01': mx('T01'),              # peak thunderstorm prob in the 3h window
-            # Precipitation: P01 peak, Q01 peak rate (was avg — wrong for hazard)
-            'P01': mx('P01'),              # peak hourly precip prob
-            'Q01': mx('Q01'),              # peak hourly QPF (1/100 in)
-            'S01': mx('S01'),              # peak hourly snow (1/10 in)
-            'I01': mx('I01'),              # peak hourly ice (1/100 in)
-            # Conditional precip-type probabilities (peak across window)
-            'PSN': mx('PSN'),
-            'PRA': mx('PRA'),
-            'PZR': mx('PZR'),
-            'PPL': mx('PPL'),
-            # Visibility (block-min in tenths of SM, NBM-direct probabilities)
-            'VIS': mn('VIS', 100),
-            'MVV': mx('MVV'),              # P(vis <= 5 SM)
-            'IFV': mx('IFV'),              # P(vis <  3 SM)
-            'LIV': mx('LIV'),              # P(vis <  1 SM)
-            # Ceiling
-            'CIG': mn('CIG', 999),
-            'MVC': mx('MVC'),
-            'IFC': mx('IFC'),
-            'LIC': mx('LIC'),
-        })
+
+        if bi < 8:
+            # Day 1: use NBH hourly data
+            nbh_hrs = [nbh.get(f) for f in range(s, e + 1) if nbh.get(f)]
+            if not nbh_hrs: blocks.append(None); continue
+            src = nbh_hrs
+            def av(k):
+                v = [h[k] for h in src if h.get(k) is not None]
+                return sum(v)/len(v) if v else None
+            def mx(k, default=0):
+                v = [h[k] for h in src if h.get(k) is not None]
+                return max(v) if v else default
+            def mn(k, default=None):
+                v = [h[k] for h in src if h.get(k) is not None]
+                return min(v) if v else default
+            blocks.append({
+                'start_fxx': s, 'end_fxx': e, 'utc_start': src[0]['utc_hour'],
+                'TMP': av('TMP'), 'TSD': av('TSD'),
+                'DPT': av('DPT'), 'DSD': av('DSD'),
+                'WDR': src[0].get('WDR'),
+                'WSP': round((av('WSP') or 0)*KT_TO_MPH, 1),
+                'GST': round((av('GST') or 0)*KT_TO_MPH, 1),
+                'GSD': round((av('GSD') or 3)*KT_TO_MPH, 1),
+                'SKY': av('SKY'),
+                'T01': mx('T01'),
+                'P01': mx('P01'),
+                'Q01': mx('Q01'),
+                'S01': sum((h.get('S01') or 0) for h in src),  # sum hourly snow (1/10 in)
+                's3hr_in': round(sum((h.get('S01') or 0) for h in src) / 10.0, 2),  # 3hr snow in inches
+                'I01': mx('I01'),
+                'PSN': mx('PSN'), 'PRA': mx('PRA'), 'PZR': mx('PZR'), 'PPL': mx('PPL'),
+                'VIS': mn('VIS', 100),
+                'MVV': mx('MVV'), 'IFV': mx('IFV'), 'LIV': mx('LIV'),
+                'CIG': mn('CIG', 999), 'MVC': mx('MVC'), 'IFC': mx('IFC'),
+                'source': 'NBH'
+            })
+        else:
+            # Day 2: use NBS 3-hourly data
+            # NBS fxx for this block: blocks 8-15 map to fxx 26,29,32,...47
+            nbs_fxx = 26 + (bi - 8) * 3
+            nb = nbs.get(nbs_fxx) if nbs else None
+            if not nb: blocks.append(None); continue
+            def _kt(v): return round((v or 0)*KT_TO_MPH, 1)
+            blocks.append({
+                'start_fxx': nbs_fxx, 'end_fxx': nbs_fxx + 2,
+                'utc_start': nb.get('utc_hour'),
+                'TMP': nb.get('TMP'), 'TSD': nb.get('TSD'),
+                'DPT': nb.get('DPT'), 'DSD': nb.get('DSD'),
+                'WDR': nb.get('WDR'),
+                'WSP': _kt(nb.get('WSP')),
+                'GST': _kt(nb.get('GST')),
+                'GSD': _kt(nb.get('GSD')),
+                'SKY': nb.get('SKY'),
+                'T01': nb.get('T03'),          # NBS uses T03 (3hr lightning prob)
+                'P01': nb.get('P06'),          # NBS uses P06
+                'Q01': nb.get('Q06'),          # NBS uses Q06
+                'S01': round((nb.get('S06') or 0) / 2, 2),  # S06 split across 2 blocks
+                's3hr_in': round((nb.get('S06') or 0) / 2 / 10.0, 2),  # 3hr snow in inches
+                'I01': nb.get('I06'),
+                'PSN': nb.get('PSN'), 'PRA': nb.get('PRA'),
+                'PZR': nb.get('PZR'), 'PPL': nb.get('PPL'),
+                'VIS': nb.get('VIS'),
+                'MVV': nb.get('MVV'), 'IFV': nb.get('IFV'), 'LIV': None,
+                'CIG': None, 'MVC': None, 'IFC': None,
+                'source': 'NBS'
+            })
     return blocks
 
 def _pack(prob, level, extra=None):
@@ -261,16 +327,12 @@ def _pack(prob, level, extra=None):
     return out
 
 
-def compute_block(block, bi, nbp, prev_block=None, is_peak_gust_block=False, is_peak_max_block=False, is_peak_min_block=False):
+def compute_block(block, bi, nbp, prev_block=None):
     """
-    Per-block hazard computation.
-
-    `prev_block` is the 3-hr block immediately before this one (or None for bi=0).
-    It is used only by FLASH_FREEZE to detect "was wet, now freezing" sequences.
-    
-    `is_peak_gust_block`: If True, use 24h P90 gust for wind calculation.
-    `is_peak_max_block`: If True, use 24h P90 temp for heat calculation.
-    `is_peak_min_block`: If True, use 24h P1 temp for cold calculation.
+    Per-block hazard computation using NBH block mean values.
+    Main() applies NBP percentile overrides to the threat matrix and
+    peak blocks after this runs.
+    `prev_block` used only by FLASH_FREEZE for wet-then-freeze detection.
     """
     if not block:
         return {hz: _pack(0, 0) for hz in HAZARDS + ["COLD","HEAT"]}
@@ -278,16 +340,9 @@ def compute_block(block, bi, nbp, prev_block=None, is_peak_gust_block=False, is_
     h = {}
 
     # ───── WIND ─────────────────────────────────────────────────────────────
-    # Gaussian on peak gust (mean=GST, std=GSD). Pick the highest-risk threshold.
-    # If this is the peak gust block, use the 24h P90 for more accurate probability.
+    # Gaussian on block mean gust. Main() will override with P50 percentile
+    # for the threat matrix and stamped blocks after compute_block runs.
     gst, gsd = block.get('GST'), block.get('GSD')
-    
-    # Use 24h P90 if this is the peak gust block
-    if is_peak_gust_block and nbp:
-        g24p50 = nbp.get('G24_D1_P5')
-        if g24p50 is not None:
-            gst = g24p50
-    
     best_p, best_l, best_rk = 0.0, 0, 0
     for thr, lvl in [(65,5), (58,4), (45,3), (30,2)]:
         p  = gauss_above(gst, gsd, thr)
@@ -311,26 +366,31 @@ def compute_block(block, bi, nbp, prev_block=None, is_peak_gust_block=False, is_
     psn = float(block.get('PSN') or 0)
     pra = float(block.get('PRA') or 0)
     pzr = float(block.get('PZR') or 0)
-    p_snow = p01 * psn / 100.0
     p_rain = p01 * pra / 100.0
     p_fzra = p01 * pzr / 100.0
 
     # ───── SNOW ─────────────────────────────────────────────────────────────
-    # Per NOAA table: L2=T-0.5"/hr, L3=0.5-1"/hr, L4=1-2"/hr, L5=>2"/hr.
-    # Boundary values belong to the lower band (so 0.5 → L2, 1.0 → L3, 2.0 → L4).
-    # S01 units = 1/10 inches per hour (so S01=5 → 0.5 in/hr).
+    # S01 is now the SUM of hourly snow across the 3hr block (1/10ths of an inch).
+    # Convert directly to inches — no multiplication needed.
+    # Level thresholds based on advisory/warning criteria:
+    #   L2 (MINOR):   Trace — any measurable snow
+    #   L3 (MODERATE): Advisory pace — ~0.5"+ per 3hr (≈2-4"/12hr)
+    #   L4 (MAJOR):   Warning pace  — ~1.0"+ per 3hr (≈4"/12hr)
+    #   L5 (EXTREME): Well above warning — ~2.0"+ per 3hr
     s01_tenths = float(block.get('S01') or 0)
-    s_in_hr    = s01_tenths / 10.0
-    snow_level = (5 if s_in_hr >  2.0
-                  else 4 if s_in_hr >  1.0
-                  else 3 if s_in_hr >  0.5
-                  else 2 if s_in_hr >  0     # trace - 0.5 in/hr
+    s3hr_in    = s01_tenths / 10.0
+    snow_level = (5 if s3hr_in >= 2.0
+                  else 4 if s3hr_in >= 1.0
+                  else 3 if s3hr_in >= 0.5
+                  else 2 if s3hr_in >  0.0
                   else 0)
-    # Even if no measurable S01, if snow precip-type chance is nontrivial it's
-    # still possibly snowing — register at L2 (trace) so the hazard is on radar.
-    if snow_level == 0 and p_snow >= 10:
+    # If no accumulation but PSN is meaningful, flag as trace (L2)
+    if snow_level == 0 and psn >= 10:
         snow_level = 2
-    h["SNOW"] = _pack(p_snow, snow_level, {"rate_in_hr": round(s_in_hr, 2)})
+    # No probability for snow blocks — level IS the forecast. Use 100% so
+    # risk matrix gives full weight to the level and color is driven by severity.
+    snow_prob = 100.0 if snow_level > 0 else 0.0
+    h["SNOW"] = _pack(snow_prob, snow_level, {"s3hr_in": round(s3hr_in, 2)})
 
     # ───── RAIN ─────────────────────────────────────────────────────────────
     # Per NOAA table: L2=0.10-0.25"/hr, L3=0.25-0.50"/hr, L4=0.50-1.00"/hr, L5=>1.00"/hr.
@@ -422,33 +482,22 @@ def compute_block(block, bi, nbp, prev_block=None, is_peak_gust_block=False, is_
     #   COLD: L2=32-40°F, L3=20-32°F, L4=10-20°F, L5=<10°F.  (L1 = ≥40°F.)
     #   HEAT: L2=90-95°F, L3=95-100°F, L4=100-105°F, L5=>105°F.  (L1 = <90°F.)
     # Walk thresholds and pick the level that yields the highest risk (matches
-    # how WIND handles its bands), not just "last threshold that fires".
-    # If this is the peak max/min block, use 24h P90/P1 for more accurate probability.
+    # ───── TEMPERATURE (heat OR cold) ───────────────────────────────────────
+    # Use block mean TMP with Gaussian. Main() will override with NBP P50
+    # percentile for the threat matrix and stamped blocks after compute_block runs.
+    # Sub-1% probabilities floored to 0 to avoid spurious LITTLE-TO-NONE.
     tmp, tsd = block.get('TMP'), (block.get('TSD') or 3)
-    
-    # Use 24h values for peak blocks
-    cold_tmp = tmp
-    heat_tmp = tmp
-    if is_peak_min_block and nbp:
-        # For cold: use P1 (lowest percentile)
-        tmin_p1 = nbp.get('TMIN_D1_P1')
-        if tmin_p1 is not None:
-            cold_tmp = tmin_p1
-    if is_peak_max_block and nbp:
-        # For heat: use P90 (highest percentile)
-        tmax_p90 = nbp.get('TMAX_D1_P9')
-        if tmax_p90 is not None:
-            heat_tmp = tmax_p90
-    
     cp, cl, c_rk = 0, 0, 0
-    for thr, lvl in [(40, 2), (32, 3), (20, 4), (10, 5)]:
-        p = gauss_below(cold_tmp, tsd, thr)
+    for thr, lvl in [(40,2),(32,3),(20,4),(10,5)]:
+        p = gauss_below(tmp, tsd, thr)
+        if p < 1.0: p = 0.0
         rk = risk_matrix(p, lvl)
         if rk > c_rk or (rk == c_rk and p > cp):
             cp, cl, c_rk = p, lvl, rk
     hp, hl, h_rk = 0, 0, 0
-    for thr, lvl in [(90, 2), (95, 3), (100, 4), (105, 5)]:
-        p = gauss_above(heat_tmp, tsd, thr)
+    for thr, lvl in [(90,2),(95,3),(100,4),(105,5)]:
+        p = gauss_above(tmp, tsd, thr)
+        if p < 1.0: p = 0.0
         rk = risk_matrix(p, lvl)
         if rk > h_rk or (rk == h_rk and p > hp):
             hp, hl, h_rk = p, lvl, rk
@@ -464,15 +513,14 @@ def main():
     nbh_sec = fetch_station(url)
     nbp_url = get_cycle('p')[2]
     nbp_sec = fetch_station(nbp_url) if nbp_url else None
+    nbs_cycle = get_cycle('s')
+    nbs_url   = nbs_cycle[2] if nbs_cycle[0] else None
+    nbs_sec   = fetch_station(nbs_url) if nbs_url else None
     if not nbh_sec: sys.exit(1)
-    nbh, nbp = parse_nbh(nbh_sec), parse_nbp(nbp_sec) if nbp_sec else {}
-    # DEBUG
-    print(f"DEBUG: NBP URL: {nbp_url}", file=sys.stderr)
-    print(f"DEBUG: NBP section fetched: {nbp_sec is not None}", file=sys.stderr)
-    print(f"DEBUG: NBP dict keys: {list(nbp.keys())}", file=sys.stderr)
-    if 'G24_D1_P5' in nbp:
-        print(f"DEBUG: G24_D1_P5 = {nbp['G24_D1_P5']}", file=sys.stderr)
-    blocks = make_blocks(nbh, {})
+    nbh  = parse_nbh(nbh_sec)
+    nbp  = parse_nbp(nbp_sec) if nbp_sec else {}
+    nbs  = parse_nbs(nbs_sec) if nbs_sec else {}
+    blocks = make_blocks(nbh, nbs)
     
     # Find peak gust hour and peak max/min temp hours BEFORE computing blocks
     peak_gust_hour = 1
@@ -498,22 +546,13 @@ def main():
     
     # Convert hours to block indices
     peak_gust_block_idx = (peak_gust_hour - 1) // 3
-    peak_max_block_idx = (peak_max_hour - 1) // 3
-    peak_min_block_idx = (peak_min_hour - 1) // 3
-    
-    print(f"DEBUG: peak_gust_hour={peak_gust_hour} (block {peak_gust_block_idx}), val={peak_gust_val}", file=sys.stderr)
-    print(f"DEBUG: peak_max_hour={peak_max_hour} (block {peak_max_block_idx}), val={peak_max_val}", file=sys.stderr)
-    print(f"DEBUG: peak_min_hour={peak_min_hour} (block {peak_min_block_idx}), val={peak_min_val}", file=sys.stderr)
-    print(f"DEBUG: G24_D1_P9={nbp.get('G24_D1_P9')}, TMAX_D1_P9={nbp.get('TMAX_D1_P9')}, TMIN_D1_P1={nbp.get('TMIN_D1_P1')}", file=sys.stderr)
+    peak_max_block_idx  = (peak_max_hour  - 1) // 3
+    peak_min_block_idx  = (peak_min_hour  - 1) // 3
     
     # Compute block hazards with peak flags
     block_hazards = []
     for i, b in enumerate(blocks):
-        is_peak_gust = (i == peak_gust_block_idx)
-        is_peak_max = (i == peak_max_block_idx)
-        is_peak_min = (i == peak_min_block_idx)
-        block_hazards.append(compute_block(b, i, nbp, prev_block=blocks[i-1] if i > 0 else None, 
-                                          is_peak_gust_block=is_peak_gust, is_peak_max_block=is_peak_max, is_peak_min_block=is_peak_min))
+        block_hazards.append(compute_block(b, i, nbp, prev_block=blocks[i-1] if i > 0 else None))
     threats = {}
     for hz in HAZARDS:
         idx = [i for i in range(len(blocks)) if blocks[i]]
@@ -529,8 +568,7 @@ def main():
         # Custom display thresholds per hazard
         display = False
         if hz == "LIGHTNING":
-            # Show lightning if 0% < prob < 5% (low but operationally important)
-            display = 0 < pk_hz["prob"] < 5
+            display = pk_hz["prob"] > 0  # show any lightning risk — operationally important
         elif hz == "WIND":
             # Show wind only if risk >= 2 (MINOR or higher, i.e., >=30 mph threat)
             display = pk_hz["risk"] >= 2
@@ -539,10 +577,7 @@ def main():
             # will correct this if needed; raw block temp at 78F should never show.
             display = pk_hz["risk"] >= 2
         elif hz == "RAIN":
-            # Show rain if it's between 0.01" and 0.10" (trace to light)
-            # Rain level corresponds to rate_in_hr in hundredths of inches
-            rain_rate = pk_hz.get("rate_in_hr", 0)
-            display = 0.01 <= rain_rate <= 0.10
+            display = pk_hz["risk"] >= 2
         else:
             # All other hazards: show if risk >= 2 (MINOR or higher)
             display = pk_hz["risk"] >= 2
@@ -578,10 +613,27 @@ def main():
     g24p5  = nbp.get('G24_D1_P5')
     g24p9  = nbp.get('G24_D1_P9')
     if g24p5 is not None:
-        w_std = max((g24p9 - g24p5) / 1.28, 1.0) if g24p9 else 3.0
+        # NOAA workflow: compute P(gust > threshold) for each impact level,
+        # look up risk matrix, pick highest risk.
+        # Use percentile interpolation: P1=10th, P5=50th, P9=90th percentile.
+        pts = sorted([(v,c) for v,c in [(g24p1,10),(g24p5,50),(g24p9,90)] if v is not None])
+
+        def pct_above(thr):
+            if thr <= pts[0][0]: return round(100.0 - pts[0][1], 1)
+            if thr >= pts[-1][0]: return max(0.0, round(100.0 - pts[-1][1], 1))
+            for i in range(len(pts)-1):
+                v0,c0 = pts[i]; v1,c1 = pts[i+1]
+                if v0 <= thr <= v1:
+                    pct = c0 + (thr-v0)*(c1-c0)/(v1-v0)
+                    return round(max(0.0, 100.0 - pct), 1)
+            return 0.0
+
         best_p, best_l, best_rk = 0.0, 0, 0
         for thr, lvl in [(65,5),(58,4),(45,3),(30,2)]:
-            p  = gauss_above(g24p5, w_std, thr)
+            p  = pct_above(thr)
+            rk = risk_matrix(p, lvl)
+            if rk > best_rk or (rk == best_rk and p > best_p):
+                best_p, best_l, best_rk = p, lvl, rk
             rk = risk_matrix(p, lvl)
             if rk > best_rk or (rk == best_rk and p > best_p):
                 best_p, best_l, best_rk = p, lvl, rk
@@ -598,17 +650,71 @@ def main():
                     "peak_end_fxx":   pk_blk["end_fxx"],
                     "peak_utc_start": pk_blk["utc_start"]} if pk_blk else {})
             })
-            # Stamp all blocks in the wind event window (raw GST mean >= 20 mph)
+            # Stamp all blocks in the wind event window.
+            # Floor = 50% of G24P5 — accounts for mean underestimating reality.
+            # Any block where raw GST >= floor is part of the same wind event.
+            gst_floor = g24p5 * 0.5
             stamped_blocks = set()
             for bi, blk in enumerate(blocks):
-                if blk and blk.get('GST', 0) >= 20.0:
+                if blk and blk.get('GST', 0) >= gst_floor:
                     stamped_blocks.add(bi)
-            stamped_blocks.add(peak_gust_block_idx)
+            stamped_blocks.add(peak_gust_block_idx)  # always include peak
             for bi in stamped_blocks:
                 if 0 <= bi < len(block_hazards) and block_hazards[bi]:
                     block_hazards[bi]['WIND'] = {
                         "prob": best_p, "risk": best_rk, "level": best_l, "color": RISK_C[best_rk]
                     }
+
+    # ───── SNOW OVERRIDE WITH 24H ACCUMULATION PERCENTILE ───────────────────
+    # Use S24P1/P5/P9 from NBP for threat matrix card.
+    # Same NOAA workflow: P(snow > threshold) for each level, risk matrix.
+    # Thresholds based on advisory/warning criteria (24hr accumulation in inches).
+    s24p1 = nbp.get('S24_D1_P1')
+    s24p5 = nbp.get('S24_D1_P5')
+    s24p9 = nbp.get('S24_D1_P9')
+    if s24p5 is not None:
+        spts = sorted([(v,c) for v,c in [(s24p1,10),(s24p5,50),(s24p9,90)] if v is not None])
+
+        def s24_above(thr):
+            if not spts: return 0.0
+            if thr <= spts[0][0]: return round(100.0 - spts[0][1], 1)
+            if thr >= spts[-1][0]: return max(0.0, round(100.0 - spts[-1][1], 1))
+            for i in range(len(spts)-1):
+                v0,c0 = spts[i]; v1,c1 = spts[i+1]
+                if v0 <= thr <= v1:
+                    pct = c0 + (thr-v0)*(c1-c0)/(v1-v0)
+                    return round(max(0.0, 100.0 - pct), 1)
+            return 0.0
+
+        # Level thresholds (24hr accumulation):
+        #   L2 (MINOR):   > 0" trace
+        #   L3 (MODERATE): >= 2" (advisory)
+        #   L4 (MAJOR):   >= 4" (warning 12hr) / 6" (24hr) — use 4" as proxy
+        #   L5 (EXTREME): >= 8" (well above warning)
+        sp, sl, srk = 0.0, 0, 0
+        for thr, lvl in [(8.0,5),(4.0,4),(2.0,3),(0.01,2)]:
+            p  = s24_above(thr)
+            rk = risk_matrix(p, lvl)
+            if rk > srk or (rk == srk and p > sp):
+                sp, sl, srk = p, lvl, rk
+
+        if srk >= 2:
+            # Find peak snow block (highest S01)
+            pk_snow_idx = max(
+                [i for i in range(len(blocks)) if blocks[i]],
+                key=lambda i: (block_hazards[i]['SNOW']['risk'],
+                               blocks[i].get('S01', 0))
+            )
+            pk_blk = blocks[pk_snow_idx]
+            threats['SNOW'].update({
+                "prob": sp, "risk": srk, "risk_label": RISK_L[srk],
+                "color": RISK_C[srk], "level": sl,
+                "metric": METRICS["SNOW"].get(sl, ""),
+                "s24_p50_in": s24p5,
+                **({"peak_start_fxx": pk_blk["start_fxx"],
+                    "peak_end_fxx":   pk_blk["end_fxx"],
+                    "peak_utc_start": pk_blk["utc_start"]} if pk_blk else {})
+            })
 
     # ───── TEMPERATURE OVERRIDE WITH 24H MAX/MIN ─────────────────────────
     # Use P90 for heat, P1 for cold. Only override if risk >= 2 (MINOR+).
@@ -618,12 +724,24 @@ def main():
     tmin_p5 = nbp.get('TMIN_D1_P5')
     tmax_p9 = nbp.get('TMAX_D1_P9')
 
-    # HEAT: use P50 max temp
+    # HEAT: compute P(temp > threshold) for each impact level, use risk matrix
     if tmax_p5 is not None:
-        t_std = max((tmax_p9 - tmax_p5) / 1.28, 1.0) if tmax_p9 else 3.0
+        tpts = sorted([(v,c) for v,c in [
+            (nbp.get('TMAX_D1_P1'),10),(tmax_p5,50),(tmax_p9,90)] if v is not None])
+
+        def tmax_above(thr):
+            if thr <= tpts[0][0]: return round(100.0 - tpts[0][1], 1)
+            if thr >= tpts[-1][0]: return max(0.0, round(100.0 - tpts[-1][1], 1))
+            for i in range(len(tpts)-1):
+                v0,c0 = tpts[i]; v1,c1 = tpts[i+1]
+                if v0 <= thr <= v1:
+                    pct = c0 + (thr-v0)*(c1-c0)/(v1-v0)
+                    return round(max(0.0, 100.0 - pct), 1)
+            return 0.0
+
         hp, hl, h_rk = 0, 0, 0
-        for thr, lvl in [(90,2),(95,3),(100,4),(105,5)]:
-            p  = gauss_above(tmax_p5, t_std, thr)
+        for thr, lvl in [(105,5),(100,4),(95,3),(90,2)]:
+            p  = tmax_above(thr)
             rk = risk_matrix(p, lvl)
             if rk > h_rk or (rk == h_rk and p > hp):
                 hp, hl, h_rk = p, lvl, rk
@@ -643,12 +761,24 @@ def main():
                     "prob": hp, "risk": h_rk, "level": hl, "color": RISK_C[h_rk], "temp_type": "heat"
                 }
 
-    # COLD: use P50 min temp
+    # COLD: compute P(temp < threshold) for each impact level, use risk matrix
     if tmin_p5 is not None:
-        t_std = max((tmin_p5 - tmin_p1) / 1.28, 1.0) if tmin_p1 else 3.0
+        tnpts = sorted([(v,c) for v,c in [
+            (tmin_p1,10),(tmin_p5,50),(nbp.get('TMIN_D1_P9'),90)] if v is not None])
+
+        def tmin_below(thr):
+            if thr >= tnpts[-1][0]: return round(tnpts[-1][1], 1)
+            if thr <= tnpts[0][0]: return max(0.0, round(tnpts[0][1], 1))
+            for i in range(len(tnpts)-1):
+                v0,c0 = tnpts[i]; v1,c1 = tnpts[i+1]
+                if v0 <= thr <= v1:
+                    pct = c0 + (thr-v0)*(c1-c0)/(v1-v0)
+                    return round(max(0.0, pct), 1)
+            return 0.0
+
         cp, cl, c_rk = 0, 0, 0
-        for thr, lvl in [(40,2),(32,3),(20,4),(10,5)]:
-            p  = gauss_below(tmin_p5, t_std, thr)
+        for thr, lvl in [(10,5),(20,4),(32,3),(40,2)]:
+            p  = tmin_below(thr)
             rk = risk_matrix(p, lvl)
             if rk > c_rk or (rk == c_rk and p > cp):
                 cp, cl, c_rk = p, lvl, rk
@@ -670,7 +800,125 @@ def main():
 
 
 
-    # ── POST-PROCESS: Zero out TEMPERATURE blocks below risk=2
+    # ───── DAY 2 FALLBACK FOR THREAT MATRIX ─────────────────────────────────
+    # If day 1 shows no threat for WIND, SNOW, or TEMPERATURE, check day 2 NBP.
+    # Use the same NOAA workflow: percentile interpolation -> risk matrix.
+    # Peak block timing comes from day 2 blocks (indices 8-15).
+
+    def _pct_above(pts, thr):
+        if not pts: return 0.0
+        if thr <= pts[0][0]: return round(100.0 - pts[0][1], 1)
+        if thr >= pts[-1][0]: return max(0.0, round(100.0 - pts[-1][1], 1))
+        for i in range(len(pts)-1):
+            v0,c0 = pts[i]; v1,c1 = pts[i+1]
+            if v0 <= thr <= v1:
+                pct = c0 + (thr-v0)*(c1-c0)/(v1-v0)
+                return round(max(0.0, 100.0 - pct), 1)
+        return 0.0
+
+    def _pct_below(pts, thr):
+        if not pts: return 0.0
+        if thr >= pts[-1][0]: return round(pts[-1][1], 1)
+        if thr <= pts[0][0]: return max(0.0, round(pts[0][1], 1))
+        for i in range(len(pts)-1):
+            v0,c0 = pts[i]; v1,c1 = pts[i+1]
+            if v0 <= thr <= v1:
+                pct = c0 + (thr-v0)*(c1-c0)/(v1-v0)
+                return round(max(0.0, pct), 1)
+        return 0.0
+
+    # Find day 2 peak blocks (indices 8-15)
+    d2_blocks = blocks[8:16]
+    d2_valid  = [b for b in d2_blocks if b]
+    d2_pk_gust_blk = max(d2_valid, key=lambda b: b.get('GST',0)) if d2_valid else None
+    d2_pk_max_blk  = max(d2_valid, key=lambda b: b.get('TMP',0)) if d2_valid else None
+    d2_pk_min_blk  = min(d2_valid, key=lambda b: b.get('TMP',999)) if d2_valid else None
+
+    # SNOW day 2 — always compute and take the higher of day 1 vs day 2
+    d2s1 = nbp.get('S24_D2_P1'); d2s5 = nbp.get('S24_D2_P5'); d2s9 = nbp.get('S24_D2_P9')
+    if d2s5 is not None:
+        d2spts = sorted([(v,c) for v,c in [(d2s1,10),(d2s5,50),(d2s9,90)] if v is not None])
+        sp, sl, srk = 0.0, 0, 0
+        for thr, lvl in [(8.0,5),(4.0,4),(2.0,3),(0.01,2)]:
+            p  = _pct_above(d2spts, thr)
+            rk = risk_matrix(p, lvl)
+            if rk > srk or (rk == srk and p > sp):
+                sp, sl, srk = p, lvl, rk
+        if srk >= 2 and srk > threats['SNOW']['risk']:  # Only upgrade if day 2 is higher
+            d2_pk_snow_blk = max(d2_valid, key=lambda b: b.get('S01', 0)) if d2_valid else None
+            threats['SNOW'].update({
+                "prob": sp, "risk": srk, "risk_label": RISK_L[srk],
+                "color": RISK_C[srk], "level": sl,
+                "metric": METRICS["SNOW"].get(sl, ""),
+                "s24_p50_in": d2s5, "day": 2,
+                **({"peak_start_fxx": d2_pk_snow_blk["start_fxx"],
+                    "peak_end_fxx":   d2_pk_snow_blk["end_fxx"],
+                    "peak_utc_start": d2_pk_snow_blk["utc_start"]} if d2_pk_snow_blk else {})
+            })
+
+    # WIND day 2 — always compute and take the higher
+    d2g1 = nbp.get('G24_D2_P1'); d2g5 = nbp.get('G24_D2_P5'); d2g9 = nbp.get('G24_D2_P9')
+    if d2g5 is not None:
+        d2pts = sorted([(v,c) for v,c in [(d2g1,10),(d2g5,50),(d2g9,90)] if v is not None])
+        bp, bl, brk = 0.0, 0, 0
+        for thr, lvl in [(65,5),(58,4),(45,3),(30,2)]:
+            p = _pct_above(d2pts, thr)
+            rk = risk_matrix(p, lvl)
+            if rk > brk or (rk == brk and p > bp):
+                bp, bl, brk = p, lvl, rk
+        if brk >= 2 and brk > threats['WIND']['risk']:  # Only upgrade if day 2 is higher
+            threats['WIND'].update({
+                "prob": bp, "risk": brk, "risk_label": RISK_L[brk],
+                "color": RISK_C[brk], "level": bl,
+                "metric": METRICS["WIND"].get(bl, ""),
+                "g24_p10_mph": d2g1, "g24_p50_mph": d2g5, "g24_p90_mph": d2g9,
+                "day": 2,
+                **({"peak_start_fxx": d2_pk_gust_blk["start_fxx"],
+                    "peak_end_fxx":   d2_pk_gust_blk["end_fxx"],
+                    "peak_utc_start": d2_pk_gust_blk["utc_start"]} if d2_pk_gust_blk else {})
+            })
+
+    # TEMPERATURE day 2 heat — always compute and take the higher
+    d2tx5 = nbp.get('TMAX_D2_P5'); d2tx1 = nbp.get('TMAX_D2_P1'); d2tx9 = nbp.get('TMAX_D2_P9')
+    if d2tx5 is not None:
+        d2tpts = sorted([(v,c) for v,c in [(d2tx1,10),(d2tx5,50),(d2tx9,90)] if v is not None])
+        hp, hl, h_rk = 0, 0, 0
+        for thr, lvl in [(105,5),(100,4),(95,3),(90,2)]:
+            p = _pct_above(d2tpts, thr)
+            rk = risk_matrix(p, lvl)
+            if rk > h_rk or (rk == h_rk and p > hp):
+                hp, hl, h_rk = p, lvl, rk
+        if h_rk >= 2 and h_rk > threats['TEMPERATURE']['risk']:
+            threats['TEMPERATURE'].update({
+                "prob": hp, "risk": h_rk, "risk_label": RISK_L[h_rk],
+                "color": RISK_C[h_rk], "level": hl,
+                "metric": METRICS["HEAT"].get(hl, ""),
+                "temp_type": "heat", "txn_24h_max": d2tx5, "day": 2,
+                **({"peak_start_fxx": d2_pk_max_blk["start_fxx"],
+                    "peak_end_fxx":   d2_pk_max_blk["end_fxx"],
+                    "peak_utc_start": d2_pk_max_blk["utc_start"]} if d2_pk_max_blk else {})
+            })
+
+    # TEMPERATURE day 2 cold — always compute and take the higher
+    d2tn5 = nbp.get('TMIN_D2_P5'); d2tn1 = nbp.get('TMIN_D2_P1'); d2tn9 = nbp.get('TMIN_D2_P9')
+    if d2tn5 is not None:
+        d2tnpts = sorted([(v,c) for v,c in [(d2tn1,10),(d2tn5,50),(d2tn9,90)] if v is not None])
+        cp, cl, c_rk = 0, 0, 0
+        for thr, lvl in [(10,5),(20,4),(32,3),(40,2)]:
+            p = _pct_below(d2tnpts, thr)
+            rk = risk_matrix(p, lvl)
+            if rk > c_rk or (rk == c_rk and p > cp):
+                cp, cl, c_rk = p, lvl, rk
+        if c_rk >= 2 and c_rk > threats['TEMPERATURE']['risk']:
+            threats['TEMPERATURE'].update({
+                "prob": cp, "risk": c_rk, "risk_label": RISK_L[c_rk],
+                "color": RISK_C[c_rk], "level": cl,
+                "metric": METRICS["COLD"].get(cl, ""),
+                "temp_type": "cold", "txn_24h_min": d2tn5, "day": 2,
+                **({"peak_start_fxx": d2_pk_min_blk["start_fxx"],
+                    "peak_end_fxx":   d2_pk_min_blk["end_fxx"],
+                    "peak_utc_start": d2_pk_min_blk["utc_start"]} if d2_pk_min_blk else {})
+            })
     for i, bh in enumerate(block_hazards):
         if bh and bh.get('TEMPERATURE', {}).get('risk', 0) < 2:
             bh['TEMPERATURE'] = {"prob": 0.0, "risk": 0, "level": 0, "color": RISK_C[0]}
