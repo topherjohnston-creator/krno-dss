@@ -909,8 +909,6 @@ def main():
         def _kt(v): return round((v or 0)*KT_TO_MPH, 1)
         # At the peak gust hour, replace GST with G24P5 so tooltip shows P50 not mean
         gst_val = _kt(h.get('GST'))
-        if fxx == peak_gust_hour and g24p5 is not None:
-            gst_val = g24p5
         nbh_hourly.append({
             'fxx': fxx, 'utc': h.get('utc_hour'), 'TMP': h.get('TMP'), 'TSD': h.get('TSD'),
             'DPT': h.get('DPT'), 'WDR': h.get('WDR'), 'WSP': _kt(h.get('WSP')), 'GST': gst_val,
