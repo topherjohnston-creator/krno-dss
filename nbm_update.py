@@ -909,10 +909,8 @@ def main():
         if bh and bh.get('TEMPERATURE', {}).get('risk', 0) < 2:
             bh['TEMPERATURE'] = {"prob": 0.0, "risk": 0, "level": 0, "color": RISK_C[0]}
 
-    # ── POST-PROCESS: Zero out WIND blocks below risk=2
-    for i, bh in enumerate(block_hazards):
-        if bh and bh.get('WIND', {}).get('risk', 0) < 2:
-            bh['WIND'] = {"prob": 0.0, "risk": 0, "level": 0, "color": RISK_C[0]}
+    # Note: WIND blocks with risk=1 (L-T-N) are kept so timeline shows grey blocks
+    # during periods where wind is a possibility but not yet at MINOR threshold.
 
     nbh_hourly = []
     for fxx in range(1, 26):
