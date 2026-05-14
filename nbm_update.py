@@ -37,7 +37,7 @@ def risk_matrix(prob, level):
     else:            pr = 0
     return _MATRIX[pr][level - 1]
 
-RISK_C = {0:"#3f3f46",1:"#6b7280",2:"#ffeb3b",3:"#ff9800",4:"#f44336",5:"#9c27b0"}
+RISK_C = {0:"#27272a",1:"#3f3f46",2:"#ffeb3b",3:"#ff9800",4:"#f44336",5:"#9c27b0"}
 RISK_L = {0:"NONE",1:"LITTLE TO NONE",2:"MINOR",3:"MODERATE",4:"MAJOR",5:"EXTREME"}
 HAZARDS = ["WIND","LIGHTNING","SNOW","VISIBILITY","FZRA","FLASH_FREEZE","RAIN","TEMPERATURE"]
 
@@ -619,8 +619,9 @@ def main():
         pts = sorted([(v,c) for v,c in [(g24p1,10),(g24p5,50),(g24p9,90)] if v is not None])
 
         def pct_above(thr):
+            if not pts: return 0.0
             if thr <= pts[0][0]: return round(100.0 - pts[0][1], 1)
-            if thr >= pts[-1][0]: return max(0.0, round(100.0 - pts[-1][1], 1))
+            if thr > pts[-1][0]: return 0.0  # threshold exceeds P90 — essentially 0% chance
             for i in range(len(pts)-1):
                 v0,c0 = pts[i]; v1,c1 = pts[i+1]
                 if v0 <= thr <= v1:
@@ -678,7 +679,7 @@ def main():
         def s24_above(thr):
             if not spts: return 0.0
             if thr <= spts[0][0]: return round(100.0 - spts[0][1], 1)
-            if thr >= spts[-1][0]: return max(0.0, round(100.0 - spts[-1][1], 1))
+            if thr > spts[-1][0]: return 0.0  # threshold exceeds P90
             for i in range(len(spts)-1):
                 v0,c0 = spts[i]; v1,c1 = spts[i+1]
                 if v0 <= thr <= v1:
@@ -730,8 +731,9 @@ def main():
             (nbp.get('TMAX_D1_P1'),10),(tmax_p5,50),(tmax_p9,90)] if v is not None])
 
         def tmax_above(thr):
+            if not tpts: return 0.0
             if thr <= tpts[0][0]: return round(100.0 - tpts[0][1], 1)
-            if thr >= tpts[-1][0]: return max(0.0, round(100.0 - tpts[-1][1], 1))
+            if thr > tpts[-1][0]: return 0.0  # threshold exceeds P90
             for i in range(len(tpts)-1):
                 v0,c0 = tpts[i]; v1,c1 = tpts[i+1]
                 if v0 <= thr <= v1:
@@ -767,8 +769,9 @@ def main():
             (tmin_p1,10),(tmin_p5,50),(nbp.get('TMIN_D1_P9'),90)] if v is not None])
 
         def tmin_below(thr):
+            if not tnpts: return 0.0
             if thr >= tnpts[-1][0]: return round(tnpts[-1][1], 1)
-            if thr <= tnpts[0][0]: return max(0.0, round(tnpts[0][1], 1))
+            if thr < tnpts[0][0]: return 0.0  # threshold below P1 — essentially 0% chance
             for i in range(len(tnpts)-1):
                 v0,c0 = tnpts[i]; v1,c1 = tnpts[i+1]
                 if v0 <= thr <= v1:
@@ -808,7 +811,7 @@ def main():
     def _pct_above(pts, thr):
         if not pts: return 0.0
         if thr <= pts[0][0]: return round(100.0 - pts[0][1], 1)
-        if thr >= pts[-1][0]: return max(0.0, round(100.0 - pts[-1][1], 1))
+        if thr > pts[-1][0]: return 0.0  # threshold exceeds P90 — essentially 0%
         for i in range(len(pts)-1):
             v0,c0 = pts[i]; v1,c1 = pts[i+1]
             if v0 <= thr <= v1:
@@ -819,7 +822,7 @@ def main():
     def _pct_below(pts, thr):
         if not pts: return 0.0
         if thr >= pts[-1][0]: return round(pts[-1][1], 1)
-        if thr <= pts[0][0]: return max(0.0, round(pts[0][1], 1))
+        if thr < pts[0][0]: return 0.0  # threshold below P1 — essentially 0%
         for i in range(len(pts)-1):
             v0,c0 = pts[i]; v1,c1 = pts[i+1]
             if v0 <= thr <= v1:
