@@ -607,31 +607,31 @@ def main():
             rk = risk_matrix(p, lvl)
             if rk > best_rk or (rk == best_rk and p > best_p):
                 best_p, best_l, best_rk = p, lvl, rk
-            rk = risk_matrix(p, lvl)
-            if rk > best_rk or (rk == best_rk and p > best_p):
-                best_p, best_l, best_rk = p, lvl, rk
+
+        # Always write percentiles so wind rose tooltip can show distribution
+        threats['WIND'].update({
+            "g24_p10_mph": g24p1,
+            "g24_p50_mph": g24p5,
+            "g24_p90_mph": g24p9,
+        })
+
         if best_rk >= 2:
             pk_blk = blocks[peak_gust_block_idx] if peak_gust_block_idx < len(blocks) and blocks[peak_gust_block_idx] else None
             threats['WIND'].update({
                 "prob": best_p, "risk": best_rk, "risk_label": RISK_L[best_rk],
                 "color": RISK_C[best_rk], "level": best_l,
                 "metric": METRICS["WIND"].get(best_l, ""),
-                "g24_p10_mph": g24p1,
-                "g24_p50_mph": g24p5,
-                "g24_p90_mph": g24p9,
                 **({"peak_start_fxx": pk_blk["start_fxx"],
                     "peak_end_fxx":   pk_blk["end_fxx"],
                     "peak_utc_start": pk_blk["utc_start"]} if pk_blk else {})
             })
             # Stamp all blocks in the wind event window.
-            # Floor = 50% of G24P5 — accounts for mean underestimating reality.
-            # Any block where raw GST >= floor is part of the same wind event.
             gst_floor = g24p5 * 0.5
             stamped_blocks = set()
             for bi, blk in enumerate(blocks):
                 if blk and blk.get('GST', 0) >= gst_floor:
                     stamped_blocks.add(bi)
-            stamped_blocks.add(peak_gust_block_idx)  # always include peak
+            stamped_blocks.add(peak_gust_block_idx)
             for bi in stamped_blocks:
                 if 0 <= bi < len(block_hazards) and block_hazards[bi]:
                     block_hazards[bi]['WIND'] = {
