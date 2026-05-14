@@ -220,7 +220,7 @@ def parse_nbp(sec):
 
 
 def parse_nbs(sec):
-    """Parse NBS (3-hourly, hours 6-72) bulletin into a dict keyed by fxx."""
+    """Parse NBS (3-hourly, hours 5-71) bulletin into a dict keyed by FHR."""
     if not sec: return {}
     n_cols, utc_row = _utc_col_count(sec)
     elements = ['TMP','TSD','DPT','DSD','WDR','WSP','GST','GSD','SKY',
@@ -228,15 +228,14 @@ def parse_nbs(sec):
                 'PSN','PRA','PZR','PPL',
                 'VIS','IFV','MVV']
     rows = {el: parse_row(el, sec, n_cols=n_cols) for el in elements}
+    # Key by FHR (forecast hour), not UTC
+    fhr_row = parse_row('FHR', sec, n_cols=n_cols)
     data = {}
-    # NBS columns map to fxx 5,8,11...71 (3-hr steps starting at fhr 5)
     for i in range(n_cols):
-        # Derive fxx from the FHR row if available, else compute
-        fxx_val = None
-        fhr_row = parse_row('FHR', sec, n_cols=n_cols)
+        # Use FHR value if available, else fall back to 5 + i*3
         if fhr_row and i < len(fhr_row) and fhr_row[i] is not None:
             fxx_val = int(fhr_row[i])
-        if fxx_val is None:
+        else:
             fxx_val = 5 + i * 3
         entry = {'utc_hour': utc_row[i] if i < len(utc_row) else None, 'fxx': fxx_val}
         for el, vals in rows.items():
@@ -265,7 +264,16 @@ def make_blocks(nbh, nbs):
             def mn(k, default=None):
                 v = [h[k] for h in src if h.get(k) is not None]
                 return min(v) if v else default
-            nbs_match = nbs.get(e) or nbs.get(s+2) or nbs.get(s+1) or nbs.get(s)
+            # Use T03 from NBS for this block (3hr prob, more accurate than peak T01)
+            # NBS FHR steps are 5,8,11,14,17,20,23 — find closest to block end
+            nbs_fxx = None
+            for candidate in [e, e-1, e-2, s+2, s+1, s]:
+                # Round to nearest NBS step (5,8,11...)
+                rounded = 5 + round((candidate - 5) / 3) * 3
+                if nbs and rounded in nbs:
+                    nbs_fxx = rounded
+                    break
+            nbs_match = nbs.get(nbs_fxx) if nbs_fxx else None
             t03_val   = nbs_match.get('T03') if nbs_match else None
             blocks.append({
                 'start_fxx': s, 'end_fxx': e, 'utc_start': src[0]['utc_hour'],
