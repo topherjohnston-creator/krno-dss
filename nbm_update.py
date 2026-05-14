@@ -597,19 +597,23 @@ def main():
                     "peak_end_fxx":   pk_blk["end_fxx"],
                     "peak_utc_start": pk_blk["utc_start"]} if pk_blk else {})
             })
-            # Stamp ALL blocks where raw wind already meets risk>=2,
-            # PLUS override the peak gust block with the authoritative P90 value.
-            for bi, bh in enumerate(block_hazards):
-                if bh and bh.get('WIND', {}).get('risk', 0) >= 2:
+            # Stamp the peak block with P90 value.
+            # Also stamp any adjacent block where raw GST mean >= 20 mph (in the same event)
+            # so the timeline shows the full wind event window.
+            gust_threshold_kt = 20.0 / KT_TO_MPH  # 20 mph in knots
+            stamped_blocks = set()
+            # First pass: find all block indices in the wind event (raw GST mean >= 20 mph)
+            for bi, blk in enumerate(blocks):
+                if blk and blk.get('GST', 0) >= 20.0:  # 20 mph in the block mean
+                    stamped_blocks.add(bi)
+            # Always include the peak gust block
+            stamped_blocks.add(peak_gust_block_idx)
+            # Stamp all event blocks with P90-based value
+            for bi in stamped_blocks:
+                if 0 <= bi < len(block_hazards) and block_hazards[bi]:
                     block_hazards[bi]['WIND'] = {
-                        "prob": bh['WIND']['prob'], "risk": bh['WIND']['risk'],
-                        "level": bh['WIND']['level'], "color": bh['WIND']['color']
+                        "prob": best_p, "risk": best_rk, "level": best_l, "color": RISK_C[best_rk]
                     }
-            # Peak gust block gets the authoritative P90-based value
-            if 0 <= peak_gust_block_idx < len(block_hazards) and block_hazards[peak_gust_block_idx]:
-                block_hazards[peak_gust_block_idx]['WIND'] = {
-                    "prob": best_p, "risk": best_rk, "level": best_l, "color": RISK_C[best_rk]
-                }
 
     # ───── TEMPERATURE OVERRIDE WITH 24H MAX/MIN ─────────────────────────
     # Use P90 for heat, P1 for cold. Only override if risk >= 2 (MINOR+).
