@@ -255,8 +255,11 @@
                             <span style="font-size:0.9rem; color:#71717a; font-weight:400;">KT</span>
                         </div>
                         <div id="wind-dir-text" style="font-family:'JetBrains Mono',monospace; font-size:1.1rem; color:#a1a1aa; font-weight:700; margin-top:2px;">--°</div>
-                    </div>
-                </div>
+                        <div id="daily-gust-row" style="display:none;position:absolute;bottom:6px;right:8px;text-align:right;">
+                            <span class="asos-label" style="font-size:0.55rem;color:#52525b;">24H MAX GUST</span>
+                            <span id="daily-gust-val" style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;font-weight:700;color:#fbbf24;margin-left:3px;">--</span>
+                            <span style="font-size:0.6rem;color:#71717a;">KT</span>
+                        </div>
 
                 <div style="width:52%; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr; gap:8px;">
 
@@ -289,11 +292,18 @@
                             <span id="sfc-temp-val" style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;font-weight:700;color:#fbbf24;"></span>
                             <span style="font-size:0.6rem;color:#71717a;">°F</span>
                         </div>
+                        <div id="daily-temp-row" style="display:none;position:absolute;bottom:6px;left:8px;text-align:left;">
+                            <span id="daily-maxt-val" style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;font-weight:700;color:#f87171;">--</span>
+                            <span style="font-size:0.55rem;color:#52525b;">MAX</span>
+                            <span style="color:#3f3f46;margin:0 2px;">|</span>
+                            <span id="daily-mint-val" style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;font-weight:700;color:#60a5fa;">--</span>
+                            <span style="font-size:0.55rem;color:#52525b;">MIN °F</span>
+                        </div>
                         <i class="ph-fill ph-thermometer-hot absolute bottom-2 right-2 text-2xl opacity-10"></i>
                     </div>
 
                     <div class="asos-box" id="wx-card" style="cursor:crosshair;"
-                         onmouseenter="showObsForecast('Thunder Probability','T01','LIGHTNING',100,'%',null)"
+                         onmouseenter="showObsForecast('Thunder Probability','T01','LIGHTNING',100,'%',null,true)"
                          onmouseleave="hideTooltip()">
                         <div class="asos-label">PRESENT WEATHER</div>
                         <div class="asos-value" id="wx-icons" style="font-size:1.8rem; margin-top:2px; min-height:28px;">--</div>
@@ -314,7 +324,7 @@
                     </div>
 
                     <div class="asos-box" style="cursor:crosshair;"
-                         onmouseenter="showObsForecast('Precip Rate Forecast','Q01','RAIN',2,'in',v=>v/100)"
+                         onmouseenter="showObsForecast('Precip Rate Forecast','Q01','RAIN',2,'in',v=>v/100,true)"
                          onmouseleave="hideTooltip()">
                         <div class="asos-label">1-HOUR PRECIPITATION</div>
                         <div class="asos-value" id="precip-val">--</div>
@@ -500,7 +510,8 @@
             }, 1000);
 
             // METAR + Alerts — every 60 seconds
-            setInterval(() => { fetchMETAR(); fetchAlerts(); }, 60 * 1000);
+            setInterval(() => { fetchMETAR(); fetchAlerts(); fetchDailyExtremes(); }, 60 * 1000);
+            fetchDailyExtremes(); // initial load
 
             // Alert countdown timers — tick every second
             setInterval(() => {
@@ -677,7 +688,7 @@
         }
 
         // Generic obs sparkline tooltip
-        window.showObsForecast = function(title, key, cmapName, maxVal, unit, transform) {
+        window.showObsForecast = function(title, key, cmapName, maxVal, unit, transform, showMaxOnly) {
             if (!nbhHourly || nbhHourly.length === 0) {
                 showTooltip(`<div style="color:#71717a;font-size:0.7rem;">No NBH forecast data loaded</div>`); return;
             }
@@ -687,7 +698,10 @@
             const vMin = txVals.length ? Math.min(...txVals) : 0;
             const vMax = txVals.length ? Math.max(...txVals) : 0;
             const fmtV = v => unit === 'SM' ? v.toFixed(1) + unit : unit === '%' ? Math.round(v) + unit : Math.round(v) + unit;
-            const tip = `<div style="font-weight:800;font-size:0.7rem;letter-spacing:0.04em;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">${title} <span style="float:right;font-weight:400;color:#71717a;font-size:0.6rem;text-transform:none;">Min ${fmtV(vMin)} &nbsp; Max ${fmtV(vMax)}</span></div>${spark}`;
+            const statStr = showMaxOnly
+                ? `Max ${fmtV(vMax)}`
+                : `Min ${fmtV(vMin)} &nbsp; Max ${fmtV(vMax)}`;
+            const tip = `<div style="font-weight:800;font-size:0.7rem;letter-spacing:0.04em;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">${title} <span style="float:right;font-weight:400;color:#71717a;font-size:0.6rem;text-transform:none;">${statStr}</span></div>${spark}`;
             showTooltip(tip);
         };
 
@@ -763,16 +777,18 @@
         // Temp box → temp forecast; Dew box → dew forecast
         window.showTempForecast = function() {
             if (!nbhHourly || nbhHourly.length === 0) return;
-            // Show P90 temperatures (TMP + 1.28×TSD) — closer to actual MaxT
-            const p99Vals = nbhHourly.map(h => h.TMP != null ? (h.TMP + 2.33 * (h.TSD || 1)) : null).filter(v => v != null);
-            const mn = Math.min(...p99Vals), mx2 = Math.max(...p99Vals);
-            // Custom sparkline using P90 values
+            // Use NBP TMAX/TMIN P50 for header labels if available
+            const tmax_p5 = refsThreats?.TEMPERATURE?.txn_24h_max ?? null;
+            const tmin_p5 = refsThreats?.TEMPERATURE?.txn_24h_min ?? null;
+            // Sparkline uses raw NBH TMP mean values
+            const vals = nbhHourly.map(h => h.TMP).filter(v => v != null);
+            const mn = Math.min(...vals), mx2 = Math.max(...vals);
             const W = 312, H = 52, BAR_W = Math.floor(W / nbhHourly.length);
             const baseMs2 = cycleStartTime || Date.now();
             let bars = '', labels = '';
             nbhHourly.forEach((h, i) => {
                 if (h.TMP == null) return;
-                const v = h.TMP + 2.33 * (h.TSD || 1);
+                const v = h.TMP;
                 const bh = Math.max(2, Math.round(((v - mn) / Math.max(mx2 - mn, 1)) * H));
                 const x = i * BAR_W;
                 bars += `<rect x="${x}" y="${H - bh}" width="${Math.max(BAR_W-1,1)}" height="${bh}" fill="${deciColormap('TEMPERATURE', v) || '#52525b'}" rx="1" opacity="0.9"/>`;
@@ -783,7 +799,9 @@
                 }
             });
             const spark = `<svg width="${W}" height="${H+16}" style="display:block;margin-top:5px;border-radius:3px;background:rgba(0,0,0,0.2);">${bars}${labels}</svg>`;
-            showTooltip(`<div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">Temperature Forecast <span style="float:right;font-weight:400;color:#71717a;font-size:0.6rem;">Min ${Math.round(mn)}°  Max ${Math.round(mx2)}°F</span></div>${spark}`);
+            const maxStr = tmax_p5 != null ? `MaxT ${Math.round(tmax_p5)}°F` : `Max ${Math.round(mx2)}°F`;
+            const minStr = tmin_p5 != null ? `MinT ${Math.round(tmin_p5)}°F` : `Min ${Math.round(mn)}°F`;
+            showTooltip(`<div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">Temperature Forecast <span style="float:right;font-weight:400;color:#71717a;font-size:0.6rem;">${minStr} &nbsp; ${maxStr}</span></div>${spark}`);
         };
         window.showDewForecast = function() {
             if (!nbhHourly || nbhHourly.length === 0) return;
@@ -974,7 +992,59 @@
             if (el) { el.textContent = msg; el.style.color = color || '#facc15'; }
         }
 
-        // --- FETCH METAR & ALERTS ---
+        // --- FETCH DAILY EXTREMES (Synoptic timeseries) ---
+        async function fetchDailyExtremes() {
+            const token = _config.synoptic_token || '';
+            if (!token) return;
+            try {
+                // Determine operational day window: 07Z-07Z (PDT) or 08Z-08Z (PST)
+                // Detect by checking if current UTC offset is -7 (PDT) or -8 (PST)
+                const now = new Date();
+                const offsetHrs = -now.getTimezoneOffset() / 60;  // e.g. -7 for PDT
+                const startHrZ = (offsetHrs === -7) ? 7 : 8;      // 07Z for PDT, 08Z for PST
+
+                // Build start time: today at startHrZ UTC, or yesterday if before that hour
+                const todayZ = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), startHrZ, 0, 0));
+                const startZ = now.getTime() < todayZ.getTime() 
+                    ? new Date(todayZ.getTime() - 86400000)  // yesterday's window
+                    : todayZ;
+
+                const fmt = d => d.toISOString().slice(0,16).replace('T','T').replace(/-/g,'').replace(':','') + '00';
+                const startStr = fmt(startZ);
+                const endStr   = fmt(now);
+
+                const url = `https://api.synopticdata.com/v2/stations/timeseries?stid=KRNO&start=${startStr}&end=${endStr}&vars=wind_gust,air_temp&units=english&token=${token}`;
+                const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
+                if (!r.ok) return;
+                const d = await r.json();
+                const obs = d?.STATION?.[0]?.OBSERVATIONS || {};
+
+                // Max gust
+                const gusts = (obs.wind_gust_set_1 || []).filter(v => v != null);
+                if (gusts.length > 0) {
+                    const maxGust = Math.round(Math.max(...gusts));  // in mph (english units)
+                    const maxGustKt = Math.round(maxGust / 1.15078);
+                    const el = document.getElementById('daily-gust-val');
+                    const row = document.getElementById('daily-gust-row');
+                    if (el && row) { el.textContent = maxGustKt; row.style.display = 'block'; }
+                }
+
+                // Max and min temperature
+                const temps = (obs.air_temp_set_1 || []).filter(v => v != null);
+                if (temps.length > 0) {
+                    const maxT = Math.round(Math.max(...temps));
+                    const minT = Math.round(Math.min(...temps));
+                    const maxEl = document.getElementById('daily-maxt-val');
+                    const minEl = document.getElementById('daily-mint-val');
+                    const row   = document.getElementById('daily-temp-row');
+                    if (maxEl && minEl && row) {
+                        maxEl.textContent = maxT;
+                        minEl.textContent = minT;
+                        row.style.display = 'block';
+                    }
+                }
+            } catch(e) { /* silent fail */ }
+        }
         async function fetchMETAR() {
             try {
                 const token = _config.synoptic_token || '';
