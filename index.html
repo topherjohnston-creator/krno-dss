@@ -994,55 +994,36 @@
             if (el) { el.textContent = msg; el.style.color = color || '#facc15'; }
         }
 
-        // --- FETCH DAILY EXTREMES (Synoptic timeseries) ---
+        // --- FETCH DAILY EXTREMES (Synoptic latest) ---
         async function fetchDailyExtremes() {
             const token = _config.synoptic_token || '';
             if (!token) return;
             try {
-                const now = new Date();
-                // Operational day: 07Z-07Z (PDT=UTC-7) or 08Z-08Z (PST=UTC-8)
-                const offsetHrs = -now.getTimezoneOffset() / 60;
-                const startHrZ  = (offsetHrs === -7) ? 7 : 8;
-
-                // Build start of operational day in UTC
-                const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), startHrZ, 0, 0));
-                const startZ = now.getTime() < todayStart.getTime()
-                    ? new Date(todayStart.getTime() - 86400000)
-                    : todayStart;
-
-                // Synoptic format: YYYYMMDDHHmm
-                const fmt = d => {
-                    const p = n => String(n).padStart(2,'0');
-                    return `${d.getUTCFullYear()}${p(d.getUTCMonth()+1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}`;
-                };
-
-                const url = `https://api.synopticdata.com/v2/stations/timeseries?stid=KRNO&start=${fmt(startZ)}&end=${fmt(now)}&vars=wind_gust,air_temp&units=english&token=${token}`;
+                const url = `https://api.synopticdata.com/v2/stations/latest?stid=KRNO&vars=peak_wind_speed,air_temp_high_24_hour,air_temp_low_24_hour&units=english&token=${token}`;
                 const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
                 if (!r.ok) return;
                 const d = await r.json();
                 const obs = d?.STATION?.[0]?.OBSERVATIONS || {};
 
-                // Max gust — Synoptic returns mph in english units, convert to kt
-                const gusts = (obs.wind_gust_set_1 || []).filter(v => v != null);
-                if (gusts.length > 0) {
-                    const maxGustMph = Math.max(...gusts);
-                    const maxGustKt  = Math.round(maxGustMph / 1.15078);
+                // Peak wind speed (mph in english units → convert to kt)
+                const pkWind = obs.peak_wind_speed_value_1?.value;
+                if (pkWind != null) {
+                    const pkKt = Math.round(pkWind / 1.15078);
                     const el  = document.getElementById('daily-gust-val');
                     const row = document.getElementById('daily-gust-row');
-                    if (el && row) { el.textContent = maxGustKt; row.style.display = 'block'; }
+                    if (el && row) { el.textContent = pkKt; row.style.display = 'block'; }
                 }
 
-                // Max and min temperature (°F in english units)
-                const temps = (obs.air_temp_set_1 || []).filter(v => v != null);
-                if (temps.length > 0) {
-                    const maxT  = Math.round(Math.max(...temps));
-                    const minT  = Math.round(Math.min(...temps));
+                // 24hr high and low temperature (°F in english units)
+                const maxT = obs.air_temp_high_24_hour_value_1?.value;
+                const minT = obs.air_temp_low_24_hour_value_1?.value;
+                if (maxT != null || minT != null) {
                     const maxEl = document.getElementById('daily-maxt-val');
                     const minEl = document.getElementById('daily-mint-val');
                     const row   = document.getElementById('daily-temp-row');
                     if (maxEl && minEl && row) {
-                        maxEl.textContent = maxT;
-                        minEl.textContent = minT;
+                        if (maxT != null) maxEl.textContent = Math.round(maxT);
+                        if (minT != null) minEl.textContent = Math.round(minT);
                         row.style.display = 'block';
                     }
                 }
