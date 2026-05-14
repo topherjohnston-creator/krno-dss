@@ -565,46 +565,18 @@ def main():
         else:
             metric_key = hz
         
-        # Custom display thresholds per hazard
-        display = False
-        if hz == "LIGHTNING":
-            display = pk_hz["prob"] > 0  # show any lightning risk — operationally important
-        elif hz == "WIND":
-            # Show wind only if risk >= 2 (MINOR or higher, i.e., >=30 mph threat)
-            display = pk_hz["risk"] >= 2
-        elif hz == "TEMPERATURE":
-            # Only show if risk >= 2 AND temp is actually extreme — the 24h override
-            # will correct this if needed; raw block temp at 78F should never show.
-            display = pk_hz["risk"] >= 2
-        elif hz == "RAIN":
-            display = pk_hz["risk"] >= 2
-        else:
-            # All other hazards: show if risk >= 2 (MINOR or higher)
-            display = pk_hz["risk"] >= 2
-        
-        if display:
-            threats[hz] = {
-                "prob": pk_hz["prob"], "risk": pk_hz["risk"],
-                "risk_label": RISK_L[pk_hz["risk"]], "color": pk_hz["color"],
-                "level": pk_hz["level"],
-                "metric": METRICS.get(metric_key, {}).get(pk_hz["level"], ""),
-                "peak_start_fxx": blocks[pk]["start_fxx"],
-                "peak_end_fxx": blocks[pk]["end_fxx"],
-                "peak_utc_start": blocks[pk]["utc_start"],
-            }
-            # Surface temp_type so the frontend can label "Heat" vs "Cold" if it wants
-            if hz == "TEMPERATURE" and "temp_type" in pk_hz:
-                threats[hz]["temp_type"] = pk_hz["temp_type"]
-        else:
-            # Not displayed: create minimal entry with risk=0 so frontend knows it exists but isn't active
-            threats[hz] = {
-                "prob": 0.0, "risk": 0,
-                "risk_label": "NONE", "color": "#3f3f46",
-                "level": 0, "metric": "",
-                "peak_start_fxx": blocks[pk]["start_fxx"],
-                "peak_end_fxx": blocks[pk]["end_fxx"],
-                "peak_utc_start": blocks[pk]["utc_start"],
-            }
+        # Always write the actual computed prob/risk — frontend dims the card if risk=0 or risk=1
+        threats[hz] = {
+            "prob": pk_hz["prob"], "risk": pk_hz["risk"],
+            "risk_label": RISK_L[pk_hz["risk"]], "color": RISK_C[pk_hz["risk"]],
+            "level": pk_hz["level"],
+            "metric": METRICS.get(metric_key, {}).get(pk_hz["level"], ""),
+            "peak_start_fxx": blocks[pk]["start_fxx"],
+            "peak_end_fxx": blocks[pk]["end_fxx"],
+            "peak_utc_start": blocks[pk]["utc_start"],
+        }
+        if hz == "TEMPERATURE" and "temp_type" in pk_hz:
+            threats[hz]["temp_type"] = pk_hz["temp_type"]
 
     # ───── WIND OVERRIDE WITH 24H GUST PERCENTILE ──────────────────────────
     # Use G24P9 (90th pct = actual peak) for prob computation in threat matrix.
