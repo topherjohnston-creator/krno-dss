@@ -927,7 +927,11 @@ def main():
     with open('threats.json', 'w') as f: json.dump({
         "threats": threats,
         "cycle_utc_iso": f"{ds[:4]}-{ds[4:6]}-{ds[6:8]}T{hs}:00:00Z",
-        "cycle": f"NBH {hs}Z"
+        "cycle": f"NBH {hs}Z",
+        "tmax_d1_p5": nbp.get('TMAX_D1_P5'),
+        "tmin_d1_p5": nbp.get('TMIN_D1_P5'),
+        "tmax_d2_p5": nbp.get('TMAX_D2_P5'),
+        "tmin_d2_p5": nbp.get('TMIN_D2_P5'),
     }, f)
     with open('timeline.json', 'w') as f: json.dump({"blocks": blocks, "block_hazards": block_hazards, "nbh_hourly": nbh_hourly}, f)
 
