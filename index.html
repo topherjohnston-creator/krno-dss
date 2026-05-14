@@ -1077,13 +1077,13 @@
                             const sd = await sr.json();
                             const obs = sd?.STATION?.[0]?.OBSERVATIONS || {};
                             if (obs.wind_speed_value_1?.value != null) {
-                                wspd = obs.wind_speed_value_1.value;
+                                wspd = Math.round(obs.wind_speed_value_1.value / 1.15078);  // mph → kt
                                 wdir = obs.wind_direction_value_1?.value ?? wdir;
                                 // Only use Synoptic gust if recent (within 10 min)
                                 const gustObs = obs.wind_gust_value_1;
                                 if (gustObs?.value && gustObs?.date_time) {
                                     const age = (Date.now() - new Date(gustObs.date_time).getTime()) / 60000;
-                                    if (age <= 10) wgst = gustObs.value;
+                                    if (age <= 10) wgst = Math.round(gustObs.value / 1.15078);  // mph → kt
                                 }
                             }
                             // Surface temperature (pavement/road sensor if available)
