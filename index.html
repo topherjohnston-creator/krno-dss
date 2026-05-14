@@ -860,8 +860,8 @@
 
                 let metLine = '';
                 if (key === 'WIND') {
-                    const p90gust = refsThreats?.WIND?.g24_p90_mph;
-                    const gustVal = p90gust ?? block?.GST;
+                    const p50gust = refsThreats?.WIND?.g24_p50_mph;
+                    const gustVal = p50gust ?? block?.GST;
                     if (gustVal != null) {
                         const gCol = deciColormap('WIND', gustVal);
                         metLine = `<span style="color:${gCol||'#fff'};font-weight:800;">${Math.round(gustVal)} mph max gust</span>`;
