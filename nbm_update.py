@@ -265,6 +265,8 @@ def make_blocks(nbh, nbs):
             def mn(k, default=None):
                 v = [h[k] for h in src if h.get(k) is not None]
                 return min(v) if v else default
+            nbs_match = nbs.get(e) or nbs.get(s+2) or nbs.get(s+1) or nbs.get(s)
+            t03_val   = nbs_match.get('T03') if nbs_match else None
             blocks.append({
                 'start_fxx': s, 'end_fxx': e, 'utc_start': src[0]['utc_hour'],
                 'TMP': av('TMP'), 'TSD': av('TSD'),
@@ -274,11 +276,11 @@ def make_blocks(nbh, nbs):
                 'GST': round((av('GST') or 0)*KT_TO_MPH, 1),
                 'GSD': round((av('GSD') or 3)*KT_TO_MPH, 1),
                 'SKY': av('SKY'),
-                'T01': mx('T01'),
+                'T01': t03_val if t03_val is not None else mx('T01'),
                 'P01': mx('P01'),
                 'Q01': mx('Q01'),
-                'S01': sum((h.get('S01') or 0) for h in src),  # sum hourly snow (1/10 in)
-                's3hr_in': round(sum((h.get('S01') or 0) for h in src) / 10.0, 2),  # 3hr snow in inches
+                'S01': sum((h.get('S01') or 0) for h in src),
+                's3hr_in': round(sum((h.get('S01') or 0) for h in src) / 10.0, 2),
                 'I01': mx('I01'),
                 'PSN': mx('PSN'), 'PRA': mx('PRA'), 'PZR': mx('PZR'), 'PPL': mx('PPL'),
                 'VIS': mn('VIS', 100),
