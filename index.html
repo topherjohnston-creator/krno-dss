@@ -143,7 +143,7 @@
                         Reno-Tahoe International Airport — KRNO
                     </div>
                 </div>
-                <h2 class="font-bold text-base tracking-wider text-slate-300" style="flex-shrink:0;margin-left:16px;">Threat Matrix</h2>
+                <h2 class="font-bold text-base tracking-wider text-slate-300" style="flex-shrink:0;margin-left:16px;">Risk Matrix</h2>
             </div>
             
             <div id="hazards-grid" class="grid grid-cols-4 gap-3 flex-grow h-full relative" style="z-index: 10;"></div>
@@ -620,23 +620,30 @@
                 if (v !== null && transform) v = transform(v);
                 return v;
             });
-            const dataMax = maxVal || Math.max(...vals.filter(v => v !== null), 1);
+            const filtered = vals.filter(v => v !== null);
+            const actualMax = filtered.length ? Math.max(...filtered) : 1;
+            const actualMin = filtered.length ? Math.min(...filtered) : 0;
+            const dataMax = maxVal || actualMax || 1;
+            const maxIdx = vals.findIndex(v => v === actualMax);
+            const minIdx = vals.findIndex(v => v === actualMin);
             let bars = '', labels = '';
             vals.forEach((v, i) => {
                 if (v === null) return;
                 const bh = Math.max(2, Math.round((v / dataMax) * H));
                 const x = i * BAR_W;
                 const y = H - bh;
-                const col = deciColormap(cmapName, v) || '#52525b';
-                bars += `<rect x="${x}" y="${y}" width="${Math.max(BAR_W-1,1)}" height="${bh}" fill="${col}" rx="1" opacity="0.9"/>`;
-                // Labels at Now, +6h, +12h, +18h, +24h
-                if (i === 0 || i === 6 || i === 12 || i === 18 || i === 24) {
+                const isMax = i === maxIdx, isMin = i === minIdx;
+                const col = isMax ? '#f87171' : isMin ? '#60a5fa' : (deciColormap(cmapName, v) || '#52525b');
+                bars += `<rect x="${x}" y="${y}" width="${Math.max(BAR_W-1,1)}" height="${bh}" fill="${col}" rx="1" opacity="${isMax||isMin?'1':'0.9'}"/>`;
+                const showLabel = i === 0 || i === 6 || i === 12 || i === 18 || i === 24 || isMax || isMin;
+                if (showLabel) {
                     const d = new Date(baseMs + (nbhHourly[i].fxx || i+1) * 3600000);
                     const lbl = i === 0 ? 'Now' : fmtHour(d);
-                    labels += `<text x="${x + BAR_W/2}" y="${H+11}" text-anchor="middle" font-size="7.5" fill="#71717a" font-family="monospace">${lbl}</text>`;
+                    const labelFill = isMax ? '#f87171' : isMin ? '#60a5fa' : '#71717a';
+                    labels += `<text x="${x + BAR_W/2}" y="${H+11}" text-anchor="middle" font-size="7.5" fill="${labelFill}" font-family="monospace" font-weight="${isMax||isMin?'800':'400'}">${lbl}</text>`;
                 }
-                // Value label on tallest bar segment
-                if (v === dataMax && v > 0) {
+                // Value label on max bar
+                if (isMax && v > 0) {
                     const valStr = unit === 'mph' ? Math.round(v) + unit : v.toFixed(unit === 'in' ? 2 : 0) + unit;
                     bars += `<text x="${x + BAR_W/2}" y="${Math.max(y-2,7)}" text-anchor="middle" font-size="7" fill="white" font-family="monospace" font-weight="bold">${valStr}</text>`;
                 }
@@ -685,7 +692,7 @@
             });
             const peakGust = Math.max(...v2s);
             const peakSpd = Math.max(...v1s);
-            return `<div style="font-size:0.6rem;color:#71717a;margin-bottom:2px;"><span style="color:#fbbf24;">■</span> Gust peak: ${Math.round(peakGust)} mph &nbsp;<span style="color:#93c5fd;">■</span> Speed: ${Math.round(peakSpd)} mph &nbsp;<span style="color:#94a3b8;">↗</span> Dir arrows</div><svg width="${W}" height="${TOTAL_H+16}" style="display:block;border-radius:3px;background:rgba(0,0,0,0.2);">${arrows}${bars}${labels}</svg>`;
+            return `<div style="font-size:0.6rem;color:#71717a;margin-bottom:2px;"><span style="color:#94a3b8;">↗</span> Dir arrows</div><svg width="${W}" height="${TOTAL_H+16}" style="display:block;border-radius:3px;background:rgba(0,0,0,0.2);">${arrows}${bars}${labels}</svg>`;
         }
 
         // Generic obs sparkline tooltip
@@ -720,17 +727,17 @@
         // High End (10% Chance of exceeding)
         if (p90) {
             var c90 = deciColormap('WIND', p90);
-            out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:2px;"><span style="color:#f87171;font-weight:700;">HIGH END (10% CHANCE)</span><span style="color:' + c90 + ';font-weight:800;">' + Math.round(p90) + ' mph</span></div>');
+            out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:2px;"><span style="color:#f87171;font-weight:700;">HIGH END MAX WIND GUST (10% CHANCE)</span><span style="color:' + c90 + ';font-weight:800;">' + Math.round(p90) + ' mph</span></div>');
         }
         
         // Middle of the Road (50% Chance / Expected)
         var c50 = deciColormap('WIND', p50);
-        out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:2px;"><span style="color:#fbbf24;font-weight:700;">EXPECTED (50% CHANCE)</span><span style="color:' + c50 + ';font-weight:800;">' + Math.round(p50) + ' mph</span></div>');
+        out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:2px;"><span style="color:#fbbf24;font-weight:700;">EXPECTED MAX WIND GUST (50% CHANCE)</span><span style="color:' + c50 + ';font-weight:800;">' + Math.round(p50) + ' mph</span></div>');
 
         // Low End (90% Chance of exceeding)
         if (p10) {
             var c10 = deciColormap('WIND', p10);
-            out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:4px;"><span style="color:#60a5fa;font-weight:700;">LOW END (90% CHANCE)</span><span style="color:' + c10 + ';font-weight:800;">' + Math.round(p10) + ' mph</span></div>');
+            out.push('<div style="display:flex;justify-content:space-between;font-family:monospace;font-size:0.68rem;margin-bottom:4px;"><span style="color:#60a5fa;font-weight:700;">LOW END MAX WIND GUST (90% CHANCE)</span><span style="color:' + c10 + ';font-weight:800;">' + Math.round(p10) + ' mph</span></div>');
         }
 
         // Peak timing logic (restored)
@@ -778,12 +785,39 @@
         // Temp box → temp forecast; Dew box → dew forecast
         window.showTempForecast = function() {
             if (!nbhHourly || nbhHourly.length === 0) return;
-            // Use NBP TMAX/TMIN P50 for header labels if available
-            const tmax_p5 = refsThreats?.TEMPERATURE?.txn_24h_max ?? null;
-            const tmin_p5 = refsThreats?.TEMPERATURE?.txn_24h_min ?? null;
-            // Sparkline uses raw NBH TMP mean values
+
+            // Check if today's min/max has already occurred by looking at NBH hourly data.
+            // The NBH fxx=1 corresponds to cycleStartTime+1hr. If the hour of the min/max
+            // is before now, that extreme has passed and we should show the next day's value.
+            const cycleMs = cycleStartTime || Date.now();
+            const nowMs   = Date.now();
+
+            // Find the fxx of the min and max TMP in NBH
+            let minVal = Infinity, maxVal = -Infinity, minFxx = 1, maxFxx = 1;
+            nbhHourly.forEach(h => {
+                if (h.TMP == null) return;
+                if (h.TMP < minVal) { minVal = h.TMP; minFxx = h.fxx || 1; }
+                if (h.TMP > maxVal) { maxVal = h.TMP; maxFxx = h.fxx || 1; }
+            });
+
+            // Convert fxx to wall clock ms
+            const minTimeMs = cycleMs + minFxx * 3600000;
+            const maxTimeMs = cycleMs + maxFxx * 3600000;
+
+            const minPassed = minTimeMs < nowMs;
+            const maxPassed = maxTimeMs < nowMs;
+
+            // Pick the right P50 value
+            const tmax_p5 = maxPassed ? (window._tmax_d2_p5 ?? window._tmax_d1_p5) : (window._tmax_d1_p5 ?? null);
+            const tmin_p5 = minPassed ? (window._tmin_d2_p5 ?? window._tmin_d1_p5) : (window._tmin_d1_p5 ?? null);
+            const maxLabel = maxPassed ? 'MaxT (tmw)' : 'MaxT';
+            const minLabel = minPassed ? 'MinT (tmw)' : 'MinT';
+
+            // Sparkline using raw NBH TMP mean values
             const vals = nbhHourly.map(h => h.TMP).filter(v => v != null);
             const mn = Math.min(...vals), mx2 = Math.max(...vals);
+            const mnIdx = nbhHourly.findIndex(h => h.TMP === mn);
+            const mxIdx = nbhHourly.findIndex(h => h.TMP === mx2);
             const W = 312, H = 52, BAR_W = Math.floor(W / nbhHourly.length);
             const baseMs2 = cycleStartTime || Date.now();
             let bars = '', labels = '';
@@ -792,17 +826,22 @@
                 const v = h.TMP;
                 const bh = Math.max(2, Math.round(((v - mn) / Math.max(mx2 - mn, 1)) * H));
                 const x = i * BAR_W;
-                bars += `<rect x="${x}" y="${H - bh}" width="${Math.max(BAR_W-1,1)}" height="${bh}" fill="${deciColormap('TEMPERATURE', v) || '#52525b'}" rx="1" opacity="0.9"/>`;
-                if (i === 0 || i === 6 || i === 12 || i === 18 || i === 24) {
-                    const d = new Date(baseMs2 + (h.fxx || i+1) * 3600000);
-                    const hh = d.getHours(); const ap = hh >= 12 ? 'P' : 'A';
-                    labels += `<text x="${x + BAR_W/2}" y="${H+11}" text-anchor="middle" font-size="7.5" fill="#71717a" font-family="monospace">${i === 0 ? 'Now' : (hh % 12 || 12) + ap}</text>`;
+                const isMax = i === mxIdx, isMin = i === mnIdx;
+                const fill = isMax ? '#f87171' : isMin ? '#60a5fa' : (deciColormap('TEMPERATURE', v) || '#52525b');
+                bars += `<rect x="${x}" y="${H - bh}" width="${Math.max(BAR_W-1,1)}" height="${bh}" fill="${fill}" rx="1" opacity="${isMax||isMin?'1':'0.7'}"/>`;
+                const d = new Date(baseMs2 + (h.fxx || i+1) * 3600000);
+                const hh = d.getHours(); const ap = hh >= 12 ? 'P' : 'A';
+                const timeStr = i === 0 ? 'Now' : (hh % 12 || 12) + ap;
+                const showLabel = i === 0 || i === 6 || i === 12 || i === 18 || i === 24 || isMax || isMin;
+                if (showLabel) {
+                    const labelFill = isMax ? '#f87171' : isMin ? '#60a5fa' : '#71717a';
+                    labels += `<text x="${x + BAR_W/2}" y="${H+11}" text-anchor="middle" font-size="7.5" fill="${labelFill}" font-family="monospace" font-weight="${isMax||isMin?'800':'400'}">${timeStr}</text>`;
                 }
             });
             const spark = `<svg width="${W}" height="${H+16}" style="display:block;margin-top:5px;border-radius:3px;background:rgba(0,0,0,0.2);">${bars}${labels}</svg>`;
-            const maxStr = tmax_p5 != null ? `MaxT ${Math.round(tmax_p5)}°F` : `Max ${Math.round(mx2)}°F`;
-            const minStr = tmin_p5 != null ? `MinT ${Math.round(tmin_p5)}°F` : `Min ${Math.round(mn)}°F`;
-            showTooltip(`<div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">Hourly Temperature Forecast <span style="float:right;font-weight:400;color:#71717a;font-size:0.6rem;">${minStr} &nbsp; ${maxStr}</span></div>${spark}`);
+            const maxStr = tmax_p5 != null ? `${maxLabel} ${Math.round(tmax_p5)}°F` : `Max ${Math.round(mx2)}°F`;
+            const minStr = tmin_p5 != null ? `${minLabel} ${Math.round(tmin_p5)}°F` : `Min ${Math.round(mn)}°F`;
+            showTooltip(`<div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">Hourly Temperature Forecast <span style="float:right;font-weight:400;font-size:0.6rem;"><span style="color:#60a5fa;">${minStr}</span> &nbsp; <span style="color:#f87171;">${maxStr}</span></span></div>${spark}`);
         };
         window.showDewForecast = function() {
             if (!nbhHourly || nbhHourly.length === 0) return;
@@ -914,7 +953,7 @@
                 rows += `<div style="margin-bottom:4px;padding:4px 6px;border-radius:3px;background:${bgCol};border-left:3px solid ${cfg.color};">
                     <div style="display:flex;justify-content:space-between;align-items:baseline;">
                         <span style="font-weight:800;font-size:0.68rem;color:#e4e4e7;text-transform:uppercase;">${h.name}</span>
-                        <span style="font-size:0.62rem;font-weight:800;color:${txtCol};">${cfg.name.toUpperCase()} ${Math.round(prob)}%</span>
+                        <span style="font-size:0.62rem;font-weight:800;color:${txtCol};">${cfg.name.toUpperCase()}</span>
                     </div>
                     ${metLine ? `<div style="font-size:0.63rem;font-family:monospace;margin-top:2px;">${metLine}</div>` : ''}
                     ${risk > 0 && h.prep ? `<div style="font-size:0.58rem;color:#71717a;margin-top:2px;">→ ${h.prep}</div>` : ''}
@@ -1799,6 +1838,10 @@
                 
                 if (threatsResp.status === 'fulfilled' && threatsResp.value.threats) {
                     refsThreats = threatsResp.value.threats;
+                    window._tmax_d1_p5 = threatsResp.value.tmax_d1_p5 ?? null;
+                    window._tmin_d1_p5 = threatsResp.value.tmin_d1_p5 ?? null;
+                    window._tmax_d2_p5 = threatsResp.value.tmax_d2_p5 ?? null;
+                    window._tmin_d2_p5 = threatsResp.value.tmin_d2_p5 ?? null;
                     document.getElementById('refs-status')?.remove();
                     // cycle_utc_iso is "YYYY-MM-DDTHH:00:00Z" — parse as UTC cycle start
                     // peak_start_fxx values in threats.json are offsets from this time
@@ -1960,9 +2003,9 @@
                                 <span class="font-mono text-${isGrey ? 'gray-500' : 'white'}">${displayVal}% Prob</span>
                             </div>
                             <div class="mb-2">
-                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded" style="background-color: ${config.color}; color: ${config.textColor}">STATUS: ${config.name.toUpperCase()} THREAT</span>
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded" style="background-color: ${config.color}; color: ${config.textColor}">RISK: ${h.risk === 0 ? 'NONE' : config.name.toUpperCase()}</span>
                             </div>
-                            <div class="text-[10px] italic text-gray-400 bg-gray-800 p-1 rounded mb-1">Threshold: ${displayMetric}</div>
+                            ${h.risk > 0 && displayMetric ? `<div class="text-[10px] italic text-gray-400 bg-gray-800 p-1 rounded mb-1">Threshold: ${displayMetric}</div>` : ''}
                             ${h.prob > 0 && h.prep ? `<div class="mt-1 text-[10px] text-gray-300 border-t border-gray-700 pt-1"><span class="font-bold text-gray-500 uppercase">Action:</span> ${h.prep}</div>` : ''}
                         `;
                         card.addEventListener('mouseenter', () => showTooltip(tHtml));
