@@ -518,10 +518,6 @@ def main():
     nbh  = parse_nbh(nbh_sec)
     nbp  = parse_nbp(nbp_sec) if nbp_sec else {}
     nbs  = parse_nbs(nbs_sec) if nbs_sec else {}
-    print(f"DEBUG NBS: {len(nbs)} entries, keys={sorted(nbs.keys())[:8]}", file=sys.stderr)
-    for fxx in [5,8,17,20,41,44]:
-        e = nbs.get(fxx)
-        print(f"DEBUG NBS fxx={fxx}: T03={e.get('T03') if e else 'MISSING'}", file=sys.stderr)
     blocks = make_blocks(nbh, nbs)
     
     # Find peak gust hour and peak max/min temp hours BEFORE computing blocks
