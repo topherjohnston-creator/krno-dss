@@ -284,9 +284,9 @@ def compute_block(block, bi, nbp, prev_block=None, is_peak_gust_block=False, is_
     
     # Use 24h P90 if this is the peak gust block
     if is_peak_gust_block and nbp:
-        g24p90 = nbp.get('G24_D1_P9')
-        if g24p90 is not None:
-            gst = g24p90
+        g24p50 = nbp.get('G24_D1_P5')
+        if g24p50 is not None:
+            gst = g24p50
     
     best_p, best_l, best_rk = 0.0, 0, 0
     for thr, lvl in [(65,5), (58,4), (45,3), (30,2)]:
@@ -443,14 +443,12 @@ def compute_block(block, bi, nbp, prev_block=None, is_peak_gust_block=False, is_
     cp, cl, c_rk = 0, 0, 0
     for thr, lvl in [(40, 2), (32, 3), (20, 4), (10, 5)]:
         p = gauss_below(cold_tmp, tsd, thr)
-        if p < 1.0: p = 0.0  # ignore sub-1% cold prob — not operationally meaningful
         rk = risk_matrix(p, lvl)
         if rk > c_rk or (rk == c_rk and p > cp):
             cp, cl, c_rk = p, lvl, rk
     hp, hl, h_rk = 0, 0, 0
     for thr, lvl in [(90, 2), (95, 3), (100, 4), (105, 5)]:
         p = gauss_above(heat_tmp, tsd, thr)
-        if p < 1.0: p = 0.0  # ignore sub-1% heat prob — not operationally meaningful
         rk = risk_matrix(p, lvl)
         if rk > h_rk or (rk == h_rk and p > hp):
             hp, hl, h_rk = p, lvl, rk
@@ -541,7 +539,10 @@ def main():
             # will correct this if needed; raw block temp at 78F should never show.
             display = pk_hz["risk"] >= 2
         elif hz == "RAIN":
-            display = pk_hz["risk"] >= 2
+            # Show rain if it's between 0.01" and 0.10" (trace to light)
+            # Rain level corresponds to rate_in_hr in hundredths of inches
+            rain_rate = pk_hz.get("rate_in_hr", 0)
+            display = 0.01 <= rain_rate <= 0.10
         else:
             # All other hazards: show if risk >= 2 (MINOR or higher)
             display = pk_hz["risk"] >= 2
@@ -597,7 +598,7 @@ def main():
                     "peak_end_fxx":   pk_blk["end_fxx"],
                     "peak_utc_start": pk_blk["utc_start"]} if pk_blk else {})
             })
-            # Stamp any block where raw GST mean >= 20 mph (full event window)
+            # Stamp all blocks in the wind event window (raw GST mean >= 20 mph)
             stamped_blocks = set()
             for bi, blk in enumerate(blocks):
                 if blk and blk.get('GST', 0) >= 20.0:
@@ -615,6 +616,7 @@ def main():
     tmin_p1 = nbp.get('TMIN_D1_P1')
     tmax_p5 = nbp.get('TMAX_D1_P5')
     tmin_p5 = nbp.get('TMIN_D1_P5')
+    tmax_p9 = nbp.get('TMAX_D1_P9')
 
     # HEAT: use P50 max temp
     if tmax_p5 is not None:
@@ -643,7 +645,7 @@ def main():
 
     # COLD: use P50 min temp
     if tmin_p5 is not None:
-        t_std = max((tmin_p5 - (nbp.get('TMIN_D1_P1') or tmin_p5)) / 1.28, 1.0)
+        t_std = max((tmin_p5 - tmin_p1) / 1.28, 1.0) if tmin_p1 else 3.0
         cp, cl, c_rk = 0, 0, 0
         for thr, lvl in [(40,2),(32,3),(20,4),(10,5)]:
             p  = gauss_below(tmin_p5, t_std, thr)
@@ -668,15 +670,12 @@ def main():
 
 
 
-    # ── POST-PROCESS: Zero out any TEMPERATURE block that didn't get a 24h override stamp.
-    # The raw block computation may produce risk=1 (LITTLE-TO-NONE) for temps like 49°F
-    # which are not operationally significant. Only blocks stamped by the 24h override
-    # (risk >= 2) should show color in the timeline.
+    # ── POST-PROCESS: Zero out TEMPERATURE blocks below risk=2
     for i, bh in enumerate(block_hazards):
         if bh and bh.get('TEMPERATURE', {}).get('risk', 0) < 2:
             bh['TEMPERATURE'] = {"prob": 0.0, "risk": 0, "level": 0, "color": RISK_C[0]}
 
-    # ── POST-PROCESS: Zero out any WIND block below risk=2 so timeline stays clean.
+    # ── POST-PROCESS: Zero out WIND blocks below risk=2
     for i, bh in enumerate(block_hazards):
         if bh and bh.get('WIND', {}).get('risk', 0) < 2:
             bh['WIND'] = {"prob": 0.0, "risk": 0, "level": 0, "color": RISK_C[0]}
@@ -685,15 +684,14 @@ def main():
     for fxx in range(1, 26):
         h = nbh.get(fxx, {})
         def _kt(v): return round((v or 0)*KT_TO_MPH, 1)
-        # For the peak gust hour, override GST with G24P9 so the tooltip shows
-        # the authoritative 24h peak value instead of the raw NBH mean.
+        # At the peak gust hour, replace GST with G24P5 so tooltip shows P50 not mean
         gst_val = _kt(h.get('GST'))
         if fxx == peak_gust_hour and g24p5 is not None:
             gst_val = g24p5
         nbh_hourly.append({
-            'fxx': fxx, 'utc': h.get('utc_hour'), 'TMP': h.get('TMP'), 'TSD': h.get('TSD'), 
+            'fxx': fxx, 'utc': h.get('utc_hour'), 'TMP': h.get('TMP'), 'TSD': h.get('TSD'),
             'DPT': h.get('DPT'), 'WDR': h.get('WDR'), 'WSP': _kt(h.get('WSP')), 'GST': gst_val,
-            'GSD': _kt(h.get('GSD')), 'SKY': h.get('SKY'), 'T01': h.get('T01'), 'P01': h.get('P01'), 
+            'GSD': _kt(h.get('GSD')), 'SKY': h.get('SKY'), 'T01': h.get('T01'), 'P01': h.get('P01'),
             'Q01': h.get('Q01'), 'VIS': h.get('VIS'), 'LIV': h.get('LIV'), 'IFV': h.get('IFV'), 'MVV': h.get('MVV')
         })
     with open('threats.json', 'w') as f: json.dump({
