@@ -576,11 +576,11 @@ def main():
     g24p1  = nbp.get('G24_D1_P1')
     g24p5  = nbp.get('G24_D1_P5')
     g24p9  = nbp.get('G24_D1_P9')
-    if g24p9 is not None:
-        w_std = max((g24p9 - (g24p5 or g24p9)) / 1.28, 1.0)
+    if g24p5 is not None:
+        w_std = max((g24p9 - g24p5) / 1.28, 1.0) if g24p9 else 3.0
         best_p, best_l, best_rk = 0.0, 0, 0
         for thr, lvl in [(65,5),(58,4),(45,3),(30,2)]:
-            p  = gauss_above(g24p9, w_std, thr)
+            p  = gauss_above(g24p5, w_std, thr)
             rk = risk_matrix(p, lvl)
             if rk > best_rk or (rk == best_rk and p > best_p):
                 best_p, best_l, best_rk = p, lvl, rk
@@ -597,18 +597,12 @@ def main():
                     "peak_end_fxx":   pk_blk["end_fxx"],
                     "peak_utc_start": pk_blk["utc_start"]} if pk_blk else {})
             })
-            # Stamp the peak block with P90 value.
-            # Also stamp any adjacent block where raw GST mean >= 20 mph (in the same event)
-            # so the timeline shows the full wind event window.
-            gust_threshold_kt = 20.0 / KT_TO_MPH  # 20 mph in knots
+            # Stamp any block where raw GST mean >= 20 mph (full event window)
             stamped_blocks = set()
-            # First pass: find all block indices in the wind event (raw GST mean >= 20 mph)
             for bi, blk in enumerate(blocks):
-                if blk and blk.get('GST', 0) >= 20.0:  # 20 mph in the block mean
+                if blk and blk.get('GST', 0) >= 20.0:
                     stamped_blocks.add(bi)
-            # Always include the peak gust block
             stamped_blocks.add(peak_gust_block_idx)
-            # Stamp all event blocks with P90-based value
             for bi in stamped_blocks:
                 if 0 <= bi < len(block_hazards) and block_hazards[bi]:
                     block_hazards[bi]['WIND'] = {
@@ -622,12 +616,12 @@ def main():
     tmax_p5 = nbp.get('TMAX_D1_P5')
     tmin_p5 = nbp.get('TMIN_D1_P5')
 
-    # HEAT: use P90 max temp
-    if tmax_p9 is not None:
-        t_std = max((tmax_p9 - (tmax_p5 or tmax_p9)) / 1.28, 1.0)
+    # HEAT: use P50 max temp
+    if tmax_p5 is not None:
+        t_std = max((tmax_p9 - tmax_p5) / 1.28, 1.0) if tmax_p9 else 3.0
         hp, hl, h_rk = 0, 0, 0
         for thr, lvl in [(90,2),(95,3),(100,4),(105,5)]:
-            p  = gauss_above(tmax_p9, t_std, thr)
+            p  = gauss_above(tmax_p5, t_std, thr)
             rk = risk_matrix(p, lvl)
             if rk > h_rk or (rk == h_rk and p > hp):
                 hp, hl, h_rk = p, lvl, rk
@@ -637,23 +631,22 @@ def main():
                 "prob": hp, "risk": h_rk, "risk_label": RISK_L[h_rk],
                 "color": RISK_C[h_rk], "level": hl,
                 "metric": METRICS["HEAT"].get(hl, ""),
-                "temp_type": "heat", "txn_24h_max": tmax_p9,
+                "temp_type": "heat", "txn_24h_max": tmax_p5,
                 **({"peak_start_fxx": pk_blk["start_fxx"],
                     "peak_end_fxx":   pk_blk["end_fxx"],
                     "peak_utc_start": pk_blk["utc_start"]} if pk_blk else {})
             })
-            # Stamp exact same value onto peak max temp block
             if 0 <= peak_max_block_idx < len(block_hazards) and block_hazards[peak_max_block_idx]:
                 block_hazards[peak_max_block_idx]['TEMPERATURE'] = {
                     "prob": hp, "risk": h_rk, "level": hl, "color": RISK_C[h_rk], "temp_type": "heat"
                 }
 
-    # COLD: use P1 min temp
-    if tmin_p1 is not None:
-        t_std = max(((tmin_p5 or tmin_p1) - tmin_p1) / 1.28, 1.0)
+    # COLD: use P50 min temp
+    if tmin_p5 is not None:
+        t_std = max((tmin_p5 - (nbp.get('TMIN_D1_P1') or tmin_p5)) / 1.28, 1.0)
         cp, cl, c_rk = 0, 0, 0
         for thr, lvl in [(40,2),(32,3),(20,4),(10,5)]:
-            p  = gauss_below(tmin_p1, t_std, thr)
+            p  = gauss_below(tmin_p5, t_std, thr)
             rk = risk_matrix(p, lvl)
             if rk > c_rk or (rk == c_rk and p > cp):
                 cp, cl, c_rk = p, lvl, rk
@@ -663,12 +656,11 @@ def main():
                 "prob": cp, "risk": c_rk, "risk_label": RISK_L[c_rk],
                 "color": RISK_C[c_rk], "level": cl,
                 "metric": METRICS["COLD"].get(cl, ""),
-                "temp_type": "cold", "txn_24h_min": tmin_p1,
+                "temp_type": "cold", "txn_24h_min": tmin_p5,
                 **({"peak_start_fxx": pk_blk["start_fxx"],
                     "peak_end_fxx":   pk_blk["end_fxx"],
                     "peak_utc_start": pk_blk["utc_start"]} if pk_blk else {})
             })
-            # Stamp exact same value onto peak min temp block
             if 0 <= peak_min_block_idx < len(block_hazards) and block_hazards[peak_min_block_idx]:
                 block_hazards[peak_min_block_idx]['TEMPERATURE'] = {
                     "prob": cp, "risk": c_rk, "level": cl, "color": RISK_C[c_rk], "temp_type": "cold"
@@ -696,8 +688,8 @@ def main():
         # For the peak gust hour, override GST with G24P9 so the tooltip shows
         # the authoritative 24h peak value instead of the raw NBH mean.
         gst_val = _kt(h.get('GST'))
-        if fxx == peak_gust_hour and g24p9 is not None:
-            gst_val = g24p9
+        if fxx == peak_gust_hour and g24p5 is not None:
+            gst_val = g24p5
         nbh_hourly.append({
             'fxx': fxx, 'utc': h.get('utc_hour'), 'TMP': h.get('TMP'), 'TSD': h.get('TSD'), 
             'DPT': h.get('DPT'), 'WDR': h.get('WDR'), 'WSP': _kt(h.get('WSP')), 'GST': gst_val,
