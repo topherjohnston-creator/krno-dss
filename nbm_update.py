@@ -615,6 +615,17 @@ def main():
             "g24_p90_mph": g24p9,
         })
 
+        # Always update prob/risk from 24h computation so card shows correct probability
+        pk_blk = blocks[peak_gust_block_idx] if peak_gust_block_idx < len(blocks) and blocks[peak_gust_block_idx] else None
+        threats['WIND'].update({
+            "prob": best_p, "risk": best_rk, "risk_label": RISK_L[best_rk],
+            "color": RISK_C[best_rk], "level": best_l,
+            "metric": METRICS["WIND"].get(best_l, ""),
+            **({"peak_start_fxx": pk_blk["start_fxx"],
+                "peak_end_fxx":   pk_blk["end_fxx"],
+                "peak_utc_start": pk_blk["utc_start"]} if pk_blk else {})
+        })
+
         if best_rk >= 2:
             pk_blk = blocks[peak_gust_block_idx] if peak_gust_block_idx < len(blocks) and blocks[peak_gust_block_idx] else None
             threats['WIND'].update({
