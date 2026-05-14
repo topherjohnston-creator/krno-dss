@@ -1948,8 +1948,8 @@
                             </div>
                             <div class="z-10 mt-1">
                                 <div class="hazard-label">${h.name}</div>
-                                <div class="hazard-criteria">${displayMetric}</div>
-                                <div class="hazard-time" style="color: ${isGrey ? 'transparent' : config.color}">${timeString}</div>
+                                <div class="hazard-criteria" style="color:${isGrey ? '#52525b' : cardActive ? '#a1a1aa' : '#71717a'}">${displayMetric}</div>
+                                <div class="hazard-time" style="color:${isGrey ? 'transparent' : cardActive ? config.color : '#52525b'}">${timeString}</div>
                             </div>
                             <i class="ph ${h.icon} watermark-icon" style="color: ${borderColor};"></i>
                         `;
