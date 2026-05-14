@@ -859,11 +859,15 @@
                 const txtCol = risk > 0 ? cfg.color : '#71717a';
 
                 let metLine = '';
-                if (key === 'WIND' && block?.GST != null) {
-                    const gCol = deciColormap('WIND', block.GST);
-                    metLine = `<span style="color:${gCol||'#fff'};font-weight:800;">${Math.round(block.GST)} mph max gust</span>`;
-                    if (block.WSP != null) metLine += `<span style="color:#71717a;"> · ${Math.round(block.WSP)} mph avg</span>`;
-                    if (block.WDR != null) metLine += `<span style="color:#71717a;"> from ${block.WDR * 10}°</span>`;
+                if (key === 'WIND') {
+                    const p90gust = refsThreats?.WIND?.g24_p90_mph;
+                    const gustVal = p90gust ?? block?.GST;
+                    if (gustVal != null) {
+                        const gCol = deciColormap('WIND', gustVal);
+                        metLine = `<span style="color:${gCol||'#fff'};font-weight:800;">${Math.round(gustVal)} mph max gust</span>`;
+                        if (block?.WSP != null) metLine += `<span style="color:#71717a;"> · ${Math.round(block.WSP)} mph avg</span>`;
+                        if (block?.WDR != null) metLine += `<span style="color:#71717a;"> from ${block.WDR * 10}°</span>`;
+                    }
                 } else if (key === 'TEMPERATURE' && block?.TMP != null) {
                     const tCol = deciColormap('TEMPERATURE', block.TMP);
                     var tmpC = deciColormap('TEMPERATURE', Math.round(block.TMP)) || '#fff';
