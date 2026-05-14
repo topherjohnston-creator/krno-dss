@@ -1,0 +1,118 @@
+{
+  "threats": {
+    "WIND": {
+      "prob": 75.0,
+      "risk": 3,
+      "risk_label": "MODERATE",
+      "color": "#ff9800",
+      "level": 3,
+      "metric": "45-58 mph",
+      "g24_p10_mph": 32.2,
+      "g24_p50_mph": 46.0,
+      "g24_p90_mph": 59.8,
+      "peak_start_fxx": 10,
+      "peak_end_fxx": 18,
+      "peak_utc_start": 17
+    },
+    "LIGHTNING": {
+      "prob": 0,
+      "risk": 0,
+      "risk_label": "NONE",
+      "color": "#27272a",
+      "level": 0,
+      "metric": "",
+      "peak_start_fxx": 1,
+      "peak_end_fxx": 3,
+      "peak_utc_start": 8
+    },
+    "SNOW": {
+      "prob": 80.0,
+      "risk": 3,
+      "risk_label": "MODERATE",
+      "color": "#ff9800",
+      "level": 3,
+      "metric": "2-4\"/12hr advisory",
+      "s24_p50_in": 2.5,
+      "peak_start_fxx": 28,
+      "peak_end_fxx": 36,
+      "peak_utc_start": 11,
+      "day": 2
+    },
+    "VISIBILITY": {
+      "prob": 40.0,
+      "risk": 1,
+      "risk_label": "LITTLE TO NONE",
+      "color": "#3f3f46",
+      "level": 2,
+      "metric": "3-5 SM",
+      "peak_start_fxx": 28,
+      "peak_end_fxx": 33,
+      "peak_utc_start": 11
+    },
+    "FZRA": {
+      "prob": 0,
+      "risk": 0,
+      "risk_label": "NONE",
+      "color": "#27272a",
+      "level": 0,
+      "metric": "",
+      "peak_start_fxx": 1,
+      "peak_end_fxx": 3,
+      "peak_utc_start": 8
+    },
+    "FLASH_FREEZE": {
+      "prob": 0,
+      "risk": 0,
+      "risk_label": "NONE",
+      "color": "#27272a",
+      "level": 0,
+      "metric": "",
+      "peak_start_fxx": 1,
+      "peak_end_fxx": 3,
+      "peak_utc_start": 8
+    },
+    "RAIN": {
+      "prob": 0,
+      "risk": 0,
+      "risk_label": "NONE",
+      "color": "#27272a",
+      "level": 0,
+      "metric": "",
+      "peak_start_fxx": 1,
+      "peak_end_fxx": 3,
+      "peak_utc_start": 8
+    },
+    "TEMPERATURE": {
+      "prob": 0,
+      "risk": 0,
+      "risk_label": "NONE",
+      "color": "#27272a",
+      "level": 0,
+      "metric": "",
+      "peak_start_fxx": 1,
+      "peak_end_fxx": 3,
+      "peak_utc_start": 8
+    }
+  },
+  "cycle_utc_iso": "2026-05-14T07:00:00Z",
+  "cycle": "TEST 07Z \u2014 wind_winter",
+  "tmax_d1_p5": 57,
+  "tmin_d1_p5": 33,
+  "tmax_d2_p5": 38,
+  "tmin_d2_p5": 32,
+  "_test_scenario": "wind_winter",
+  "_alerts": [
+    {
+      "event": "Wind Advisory",
+      "headline": "Wind Advisory until 7PM PDT. Southwest winds 25 to 35 mph with gusts up to 55 mph. Use caution driving high-profile vehicles.",
+      "startHr": 7.426641827222222,
+      "endHr": 15.426641827222223
+    },
+    {
+      "event": "Winter Weather Advisory",
+      "headline": "Winter Weather Advisory from 7AM to 4PM PDT Thursday. Snow accumulations of 2 to 4 inches expected at airport elevation. Expect slippery taxiways and ramps.",
+      "startHr": 27.42664182722222,
+      "endHr": 36.42664182722223
+    }
+  ]
+}
