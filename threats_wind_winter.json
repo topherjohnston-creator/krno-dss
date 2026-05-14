@@ -103,6 +103,13 @@
   "_test_scenario": "wind_winter",
   "_alerts": [
     {
+      "event": "Airport Weather Warning",
+      "headline": "Airport Weather Warning \u2014 KRNO: Wind gusts 30 knots or higher. Cloud to ground lightning within 10 nm of the airport. Torrential rainfall.",
+      "startHr": 0.0,
+      "endHr": 2.0,
+      "isAWW": true
+    },
+    {
       "event": "Wind Advisory",
       "headline": "Wind Advisory until 7PM PDT. Southwest winds 25 to 35 mph with gusts up to 55 mph. Use caution driving high-profile vehicles.",
       "startHr": 7.426641827222222,
