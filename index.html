@@ -159,7 +159,7 @@
                 </div>
                 <div class="flex items-center gap-3 flex-wrap justify-end">
                      <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #3f3f46;"></div>None</div>
-                     <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #e2f0cb;"></div>Little to None</div>
+                     <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #6b7280;"></div>Little to None</div>
                      <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #ffeb3b;"></div>Minor</div>
                      <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #ff9800;"></div>Moderate</div>
                      <div class="flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400 font-bold"><div class="w-3 h-3" style="background-color: #f44336;"></div>Major</div>
@@ -460,7 +460,7 @@
             4: { name: "Major", color: '#f44336', textColor: '#ffffff' },   
             3: { name: "Moderate", color: '#ff9800', textColor: '#000000' }, 
             2: { name: "Minor", color: '#ffeb3b', textColor: '#000000' },   
-            1: { name: "Little to None", color: '#e2f0cb', textColor: '#000000' }, 
+            1: { name: "Little to None", color: '#6b7280', textColor: '#ffffff' }, 
             0: { name: "None", color: '#3f3f46', textColor: '#71717a' } 
         };
 
@@ -880,14 +880,14 @@
                     metLine = `<span style="color:${vCol||'#fff'};font-weight:800;">${sm >= 10 ? '10+ SM' : sm.toFixed(1) + ' SM'}</span>`;
                 } else if (key === 'LIGHTNING') {
                     metLine = `<span style="color:${txtCol};font-weight:800;">${Math.round(prob)}% thunder</span>`;
-                } else if (key === 'SNOW' && block?.S06 > 0) {
-                    const rate = ((block.S06 / 10) / 6).toFixed(2);
-                    metLine = `<span style="color:${deciColormap('SNOW', parseFloat(rate))||'#fff'};font-weight:800;">${rate} in/hr</span>`;
+                } else if (key === 'SNOW' && block?.s3hr_in > 0) {
+                    const acc = block.s3hr_in.toFixed(2);
+                    metLine = `<span style="color:${deciColormap('SNOW', parseFloat(acc))||'#fff'};font-weight:800;">${acc}" / 3hr</span>`;
                 } else if (key === 'RAIN' && block?.Q01 > 0) {
                     const rate = (block.Q01 / 100).toFixed(2);
                     metLine = `<span style="color:${deciColormap('RAIN', parseFloat(rate))||'#fff'};font-weight:800;">${rate} in/hr</span>`;
-                } else if (key === 'FZRA' && block?.ZR6 > 0) {
-                    metLine = `<span style="color:#60a5fa;font-weight:800;">${(block.ZR6/100).toFixed(3)}" FZRA / 6hr</span>`;
+                } else if (key === 'FZRA' && block?.I01 > 0) {
+                    metLine = `<span style="color:#60a5fa;font-weight:800;">${(block.I01/100).toFixed(3)}" FZRA / hr</span>`;
                 } else if (key === 'FLASH_FREEZE' && block?.TMP != null && block?.DPT != null) {
                     const tw = block.TMP - (block.TMP - block.DPT) / 3;
                     metLine = `<span style="color:${deciColormap('FLASH_FREEZE', tw)||'#fff'};font-weight:800;">Tw ${Math.round(tw)}°F</span>`;
@@ -1841,14 +1841,16 @@
                         // ✨ THIS IS THE MAGIC LINE: ZERO HARDCODING ✨
                         // Fallback metrics if API doesn't return them
                         const FALLBACK_METRICS = {
-                            'WIND':        {2:'30-45 mph',    3:'45-58 mph',     4:'58-65 mph',   5:'>65 mph'},
-                            'SNOW':        {2:'T-0.5"/hr',    3:'0.5-1"/hr',     4:'1-2"/hr',     5:'>2"/hr'},
-                            'LIGHTNING':   {1:'<5%', 2:'5-25%',        3:'25-50%',        4:'50-75%',      5:'>75%'},
-                            'VISIBILITY':  {2:'3-5 SM',       3:'1-3 SM',        4:'0.5-1 SM',    5:'<0.5 SM'},
-                            'RAIN':        {2:'0.1-0.25"/hr', 3:'0.25-0.5"/hr',  4:'0.5-1"/hr',   5:'>1"/hr'},
-                            'FZRA':        {2:'Trace',        3:'Trace-0.01"',   4:'0.01-0.1"',   5:'>0.1"'},
-                            'FLASH_FREEZE':{2:'Wet+<36°F',    3:'Wet+<32°F',     4:'Wet+<28°F',   5:'Wet+<25°F'},
-                            'TEMPERATURE': {1:'85-90°F', 2:'90-95°F',      3:'95-100°F',      4:'100-105°F',   5:'>105°F'},
+                            'WIND':        {2:'30-45 mph',       3:'45-58 mph',          4:'58-65 mph',         5:'>65 mph'},
+                            'SNOW':        {2:'Trace-2"/24hr',   3:'2-4"/12hr advisory', 4:'4"+/12hr warning',  5:'Well above warning'},
+                            'LIGHTNING':   {1:'<5%', 2:'5-25%', 3:'25-50%',             4:'50-75%',            5:'>75%'},
+                            'VISIBILITY':  {2:'3-5 SM',          3:'1-3 SM',             4:'0.5-1 SM',          5:'<0.5 SM'},
+                            'RAIN':        {2:'0.1-0.25"/hr',    3:'0.25-0.5"/hr',       4:'0.5-1"/hr',         5:'>1"/hr'},
+                            'FZRA':        {2:'Trace',           3:'Trace-0.01"',        4:'0.01-0.1"',         5:'>0.1"'},
+                            'FLASH_FREEZE':{2:'Wet+<36°F',       3:'Wet+<32°F',          4:'Wet+<28°F',         5:'Wet+<25°F'},
+                            'HEAT':        {2:'90-95°F',         3:'95-100°F',           4:'100-105°F',         5:'>105°F'},
+                            'COLD':        {2:'32-40°F',         3:'20-32°F',            4:'10-20°F',           5:'<10°F'},
+                            'TEMPERATURE': {2:'90-95°F',         3:'95-100°F',           4:'100-105°F',         5:'>105°F'},
                         };
                         const threatData = refsThreats && refsThreats[refKey];
                         const threatLevel = threatData?.level || h.risk || 0;
@@ -1971,8 +1973,8 @@
                     // ── NBM 3-hour block timeline (16 blocks × 3h = 48h) ──────────────────
                     const N_BLOCKS = 16;
                     const BLOCK_W  = 100 / N_BLOCKS;
-                    const BLK_BG   = {0:'#3f3f46',1:'#e2f0cb',2:'#ffeb3b',3:'#ff9800',4:'#f44336',5:'#9c27b0'};
-                    const BLK_TX   = {0:'#71717a',1:'#1a3a0a',2:'#3f3000',3:'#3f1a00',4:'#ffffff',5:'#ffffff'};
+                    const BLK_BG   = {0:'#3f3f46',1:'#6b7280',2:'#ffeb3b',3:'#ff9800',4:'#f44336',5:'#9c27b0'};
+                    const BLK_TX   = {0:'#71717a',1:'#ffffff',2:'#3f3000',3:'#3f1a00',4:'#ffffff',5:'#ffffff'};
 
                     const HZ_KEY = (id) => ({
                         Wind:'WIND',Lightning:'LIGHTNING',Snow:'SNOW',
@@ -2013,10 +2015,8 @@
                             const tf = d => { const hh=d.getHours(); return `${hh%12||12}${hh>=12?'P':'A'}`; };
                             const tip = `${tf(d1)}-${tf(d2)}: ${Math.round(prob)}%${bhaz?.level>0?' L'+bhaz.level:''}`;
 
-                            // Show prob % text on colored blocks only
-                            const txt = risk > 0
-                                ? `<span style="font-size:0.6rem;font-weight:800;color:${tx};line-height:1;pointer-events:none">${Math.round(prob)}%</span>`
-                                : '';
+                            // No prob % on bars — color speaks for itself; details in tooltip
+                            const txt = '';
 
                             // Compute hours-from-now for this block so tooltip gets correct time
                             const _hrOff = Math.round((cycleMs + sFxx*3600000 - globalNow.getTime()) / 3600000);
