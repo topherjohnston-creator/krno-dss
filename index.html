@@ -273,7 +273,7 @@
                     </div>
 
                     <div class="asos-box" style="cursor:crosshair;"
-                         onmouseenter="showObsForecast('Cloud Cover Forecast','SKY','SKY',100,'%',null)"
+                         onmouseenter="showObsForecast('Hourly Cloud Cover Forecast','SKY','SKY',100,'%',null)"
                          onmouseleave="hideTooltip()">
                         <div class="flight-cat" id="fc-badge">--</div>
                         <div class="asos-label">SKY CONDITION</div>
@@ -305,7 +305,7 @@
                     </div>
 
                     <div class="asos-box" id="wx-card" style="cursor:crosshair;"
-                         onmouseenter="showObsForecast('Thunder Probability','T01','LIGHTNING',100,'%',null,true)"
+                         onmouseenter="showObsForecast('Hourly Thunder Probability Forecast','T01','LIGHTNING',100,'%',null,true)"
                          onmouseleave="hideTooltip()">
                         <div class="asos-label">PRESENT WEATHER</div>
                         <div class="asos-value" id="wx-icons" style="font-size:1.8rem; margin-top:2px; min-height:28px;">--</div>
@@ -326,7 +326,7 @@
                     </div>
 
                     <div class="asos-box" style="cursor:crosshair;"
-                         onmouseenter="showObsForecast('Precip Rate Forecast','Q01','RAIN',2,'in',v=>v/100,true)"
+                         onmouseenter="showObsForecast('Hourly Rainfall Rate Forecast','Q01','RAIN',2,'in',v=>v/100,true)"
                          onmouseleave="hideTooltip()">
                         <div class="asos-label">1-HOUR PRECIPITATION</div>
                         <div class="asos-value" id="precip-val">--</div>
@@ -710,7 +710,7 @@
         // Wind-specific sparkline (speed + gust dual bar)
         window.showWindForecast = function() {
     var out = [];
-    out.push('<div style="font-weight:800;font-size:0.7rem;letter-spacing:0.04em;border-bottom:1px solid #3f3f46;padding-bottom:4px;margin-bottom:6px;">24-HR WIND GUST OUTLOOK</div>');
+    out.push('<div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">Wind Outlook</div>');
 
     // Pull percentile data from refsThreats (provided by NBP logic in backend)
     var p10 = (refsThreats && refsThreats.WIND) ? refsThreats.WIND.g24_p10_mph : null; // Note: Ensure backend exports P10
@@ -803,14 +803,14 @@
             const spark = `<svg width="${W}" height="${H+16}" style="display:block;margin-top:5px;border-radius:3px;background:rgba(0,0,0,0.2);">${bars}${labels}</svg>`;
             const maxStr = tmax_p5 != null ? `MaxT ${Math.round(tmax_p5)}°F` : `Max ${Math.round(mx2)}°F`;
             const minStr = tmin_p5 != null ? `MinT ${Math.round(tmin_p5)}°F` : `Min ${Math.round(mn)}°F`;
-            showTooltip(`<div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">Temperature Forecast <span style="float:right;font-weight:400;color:#71717a;font-size:0.6rem;">${minStr} &nbsp; ${maxStr}</span></div>${spark}`);
+            showTooltip(`<div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">Hourly Temperature Forecast <span style="float:right;font-weight:400;color:#71717a;font-size:0.6rem;">${minStr} &nbsp; ${maxStr}</span></div>${spark}`);
         };
         window.showDewForecast = function() {
             if (!nbhHourly || nbhHourly.length === 0) return;
             const vals = nbhHourly.map(h => h.DPT).filter(v => v!=null);
             const mn = Math.min(...vals), mx2 = Math.max(...vals);
             const spark = makeObsSparkline('DPT', 'TEMPERATURE', 100, null, '°F');
-            showTooltip(`<div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">Dewpoint Forecast <span style="float:right;font-weight:400;color:#71717a;font-size:0.6rem;">Min ${Math.round(mn)}°  Max ${Math.round(mx2)}°</span></div>${spark}`);
+            showTooltip(`<div style="font-weight:800;font-size:0.7rem;border-bottom:1px solid #3f3f46;padding-bottom:3px;margin-bottom:4px;">Hourly Dewpoint Forecast <span style="float:right;font-weight:400;color:#71717a;font-size:0.6rem;">Min ${Math.round(mn)}°  Max ${Math.round(mx2)}°</span></div>${spark}`);
         };
         window.showTempDewTooltip = window.showTempForecast; // legacy alias
 
@@ -999,43 +999,44 @@
             const token = _config.synoptic_token || '';
             if (!token) return;
             try {
-                // Determine operational day window: 07Z-07Z (PDT) or 08Z-08Z (PST)
-                // Detect by checking if current UTC offset is -7 (PDT) or -8 (PST)
                 const now = new Date();
-                const offsetHrs = -now.getTimezoneOffset() / 60;  // e.g. -7 for PDT
-                const startHrZ = (offsetHrs === -7) ? 7 : 8;      // 07Z for PDT, 08Z for PST
+                // Operational day: 07Z-07Z (PDT=UTC-7) or 08Z-08Z (PST=UTC-8)
+                const offsetHrs = -now.getTimezoneOffset() / 60;
+                const startHrZ  = (offsetHrs === -7) ? 7 : 8;
 
-                // Build start time: today at startHrZ UTC, or yesterday if before that hour
-                const todayZ = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), startHrZ, 0, 0));
-                const startZ = now.getTime() < todayZ.getTime() 
-                    ? new Date(todayZ.getTime() - 86400000)  // yesterday's window
-                    : todayZ;
+                // Build start of operational day in UTC
+                const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), startHrZ, 0, 0));
+                const startZ = now.getTime() < todayStart.getTime()
+                    ? new Date(todayStart.getTime() - 86400000)
+                    : todayStart;
 
-                const fmt = d => d.toISOString().slice(0,16).replace('T','T').replace(/-/g,'').replace(':','') + '00';
-                const startStr = fmt(startZ);
-                const endStr   = fmt(now);
+                // Synoptic format: YYYYMMDDHHmm
+                const fmt = d => {
+                    const p = n => String(n).padStart(2,'0');
+                    return `${d.getUTCFullYear()}${p(d.getUTCMonth()+1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}`;
+                };
 
-                const url = `https://api.synopticdata.com/v2/stations/timeseries?stid=KRNO&start=${startStr}&end=${endStr}&vars=wind_gust,air_temp&units=english&token=${token}`;
+                const url = `https://api.synopticdata.com/v2/stations/timeseries?stid=KRNO&start=${fmt(startZ)}&end=${fmt(now)}&vars=wind_gust,air_temp&units=english&token=${token}`;
                 const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
                 if (!r.ok) return;
                 const d = await r.json();
                 const obs = d?.STATION?.[0]?.OBSERVATIONS || {};
 
-                // Max gust
+                // Max gust — Synoptic returns mph in english units, convert to kt
                 const gusts = (obs.wind_gust_set_1 || []).filter(v => v != null);
                 if (gusts.length > 0) {
-                    const maxGust = Math.round(Math.max(...gusts));  // in mph (english units)
-                    const maxGustKt = Math.round(maxGust / 1.15078);
-                    const el = document.getElementById('daily-gust-val');
+                    const maxGustMph = Math.max(...gusts);
+                    const maxGustKt  = Math.round(maxGustMph / 1.15078);
+                    const el  = document.getElementById('daily-gust-val');
                     const row = document.getElementById('daily-gust-row');
                     if (el && row) { el.textContent = maxGustKt; row.style.display = 'block'; }
                 }
 
-                // Max and min temperature
+                // Max and min temperature (°F in english units)
                 const temps = (obs.air_temp_set_1 || []).filter(v => v != null);
                 if (temps.length > 0) {
-                    const maxT = Math.round(Math.max(...temps));
-                    const minT = Math.round(Math.min(...temps));
+                    const maxT  = Math.round(Math.max(...temps));
+                    const minT  = Math.round(Math.min(...temps));
                     const maxEl = document.getElementById('daily-maxt-val');
                     const minEl = document.getElementById('daily-mint-val');
                     const row   = document.getElementById('daily-temp-row');
@@ -1045,7 +1046,7 @@
                         row.style.display = 'block';
                     }
                 }
-            } catch(e) { /* silent fail */ }
+            } catch(e) { console.warn('fetchDailyExtremes:', e); }
         }
         async function fetchMETAR() {
             try {
