@@ -21,6 +21,18 @@
         .hazard-val { font-family: 'JetBrains Mono', monospace; font-size: 3.2rem; font-weight: 700; letter-spacing: -2px; line-height: 1; z-index: 10; position: relative; display: flex; align-items: flex-start; }
         .percent-sign { font-size: 1.2rem; margin-top: 6px; opacity: 0.7; margin-left: 2px; }
         .hazard-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #a1a1aa; z-index: 10; position: relative; line-height: 1.1; }
+        .hazard-card-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: clamp(1.18rem, 1.30vw, 1.55rem);
+            font-weight: 900;
+            letter-spacing: 0.015em;
+            line-height: 0.98;
+            text-transform: uppercase;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: clip;
+            max-width: 100%;
+        }
         .hazard-criteria { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #71717a; margin-top: 2px; z-index: 10; position: relative; font-weight: 700; }
         .hazard-time { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; margin-top: 4px; z-index: 10; position: relative; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
         .watermark-icon { position: absolute; right: -8px; bottom: -8px; font-size: 4rem; opacity: 0.12; transform: rotate(-10deg); z-index: 0; pointer-events: none; }
@@ -125,6 +137,20 @@
         .alert-raw { display:none; margin-top:8px; padding:8px; background:#09090b; border-radius:3px; font-size:0.6rem; font-family:'JetBrains Mono',monospace; color:#71717a; max-height:120px; overflow-y:auto; line-height:1.5; word-break:break-word; }
         /* SUBTLE CARD BORDERS */
         .asos-box { border: 1px solid rgba(255,255,255,0.07) !important; }
+    
+        /* Hazard card labels: compact, single-line, original-style */
+        .risk-card .hazard-title, .threat-card .hazard-title, .hazard-card .hazard-title {
+            font-size: clamp(1.35rem, 2.0vw, 2.05rem);
+            line-height: 0.95;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: clip;
+            letter-spacing: 0.02em;
+        }
+        .risk-card .tooltip-title, .threat-card .tooltip-title, .hazard-card .tooltip-title {
+            white-space: normal;
+        }
+
     </style>
 </head>
 <body class="p-2 lg:p-4 h-screen box-border relative">
@@ -479,14 +505,14 @@
         const EXTREME_WARNINGS_LIST = [ "blizzard warning", "tornado warning", "severe thunderstorm warning", "ice storm warning", "snow squall warning", "extreme cold warning", "flash flood warning", "airport weather warning" ];
 
         const HAZARD_DETAILS = [
-            { id: 'Wind',        icon: "ph-wind",             name: "Wind",          timelineName: "WIND",     prep: "Debris/high-profile vehicles" },
-            { id: 'Lightning',   icon: "ph-lightning",        name: "Lightning",     timelineName: "LTNG",     prep: "Ramp/safety closure" },
-            { id: 'Snow',        icon: "ph-snowflake",        name: "Snow",          timelineName: "SNOW",     prep: "Plow operations" },
-            { id: 'Visibility',  icon: "ph-eye",              name: "Visibility",    timelineName: "VIS",      prep: "Driver disorientation" },
-            { id: 'FZRA',        icon: "ph-cloud-snow",       name: "Freezing Rain", timelineName: "FRZ RAIN", prep: "Chemical treatment" },
-            { id: 'FlashFreeze', icon: "ph-thermometer-cold", name: "Flash Freeze",  timelineName: "FLASH FRZ",prep: "Chemical treatment efficacy" },
-            { id: 'Rain',        icon: "ph-drop",             name: "Rain/Flooding", timelineName: "RAIN",     prep: "Drainage capacity" },
-            { id: 'Temperature', icon: "ph-thermometer",      name: "Temperature",   timelineName: "TEMP",     prep: "Heat/cold stress" },
+            { id: 'Wind',        icon: "ph-wind",             name: "WIND",      fullName: "Wind",          timelineName: "WIND",     prep: "Debris/high-profile vehicles" },
+            { id: 'Lightning',   icon: "ph-lightning",        name: "LIGHTNING", fullName: "Lightning",     timelineName: "LTNG",     prep: "Ramp/safety closure" },
+            { id: 'Snow',        icon: "ph-snowflake",        name: "SNOW",      fullName: "Snow",          timelineName: "SNOW",     prep: "Plow operations" },
+            { id: 'Visibility',  icon: "ph-eye",              name: "VISIBILITY",fullName: "VISIBILITY",    timelineName: "VIS",      prep: "Low-visibility operations" },
+            { id: 'FZRA',        icon: "ph-cloud-snow",       name: "FZRA",      fullName: "FREEZING RAIN", timelineName: "FZRA",     prep: "Chemical treatment" },
+            { id: 'FlashFreeze', icon: "ph-thermometer-cold", name: "FLASH FZ",  fullName: "FLASH FREEZE",  timelineName: "FLASH FZ", prep: "Chemical treatment efficacy" },
+            { id: 'Rain',        icon: "ph-drop",             name: "RAIN",      fullName: "Rain",          timelineName: "RAIN",     prep: "Drainage capacity" },
+            { id: 'Temperature', icon: "ph-thermometer",      name: "TEMP",      fullName: "TEMPERATURE",   timelineName: "TEMP",     prep: "Heat/cold stress" },
         ];
 
         // --- DATA STATE ---
@@ -1934,42 +1960,44 @@
                     });
 
                     hazards.forEach(h => {
-                        const isGrey = h.risk === 0;
-                        const r = h.risk;
-                        const config = RISK_LEVELS[r];
-                        
-                        const borderColor = config.color;
-                        const valColor = isGrey ? '#52525b' : '#ffffff'; 
-                        const displayVal = h.risk === 0 ? 0 : Math.round(h.prob);
-                        
+                        const r = Number(h.risk || 0);
+                        const config = RISK_LEVELS[r] || RISK_LEVELS[0];
+                        const isNone = r === 0;
+                        const isActive = r >= 2;
+
                         const refKey = hazardMapping[h.id] || h.id.toUpperCase();
-                        
-                        // ✨ THIS IS THE MAGIC LINE: ZERO HARDCODING ✨
-                        // Fallback metrics if API doesn't return them
+                        const threatData = refsThreats && refsThreats[refKey] ? refsThreats[refKey] : {};
+
+                        const hazardTitle = (h.name || refKey).toUpperCase();
+                        const probability = Number(threatData.prob ?? h.prob ?? 0);
+                        const impactLevel = Number(threatData.level ?? r ?? 0);
+                        const riskName = r === 0 ? 'None' : (config.name || 'Unknown');
+
                         const FALLBACK_METRICS = {
                             'WIND':        {2:'30-45 mph',       3:'45-58 mph',          4:'58-65 mph',         5:'>65 mph'},
-                            'SNOW':        {2:'Trace-2"/24hr',   3:'2-4"/12hr advisory', 4:'4"+/12hr warning',  5:'Well above warning'},
-                            'LIGHTNING':   {1:'<5%', 2:'5-25%', 3:'25-50%',             4:'50-75%',            5:'>75%'},
+                            'SNOW':        {2:'>0.10 in/hr',     3:'>0.50 in/hr',        4:'>1.00 in/hr',       5:'>2.00 in/hr'},
+                            'LIGHTNING':   {1:'<5%',             2:'5-25%',              3:'25-50%',            4:'50-75%',        5:'>75%'},
                             'VISIBILITY':  {2:'3-5 SM',          3:'1-3 SM',             4:'0.5-1 SM',          5:'<0.5 SM'},
-                            'RAIN':        {2:'0.1-0.25"/hr',    3:'0.25-0.5"/hr',       4:'0.5-1"/hr',         5:'>1"/hr'},
+                            'RAIN':        {2:'6-hr accumulation',3:'Advisory threshold',4:'Warning threshold',  5:'High-end flooding'},
                             'FZRA':        {2:'Trace',           3:'Trace-0.01"',        4:'0.01-0.1"',         5:'>0.1"'},
-                            'FLASH_FREEZE':{2:'Wet+<36°F',       3:'Wet+<32°F',          4:'Wet+<28°F',         5:'Wet+<25°F'},
-                            'HEAT':        {2:'90-95°F',         3:'95-100°F',           4:'100-105°F',         5:'>105°F'},
-                            'COLD':        {2:'32-40°F',         3:'20-32°F',            4:'10-20°F',           5:'<10°F'},
-                            'TEMPERATURE': {2:'90-95°F',         3:'95-100°F',           4:'100-105°F',         5:'>105°F'},
+                            'FLASH_FREEZE':{2:'Wet + near freezing',3:'Wet + <32°F',     4:'Wet + <28°F',       5:'Wet + <25°F'},
+                            'TEMPERATURE': {2:'Operational threshold',3:'Moderate temp impact',4:'Major temp impact',5:'Extreme temp impact'},
                         };
-                        const threatData = refsThreats && refsThreats[refKey];
-                        const threatLevel = threatData?.level || h.risk || 0;
-                        const displayMetric = threatData?.metric 
-                            || (FALLBACK_METRICS[refKey]?.[threatLevel]) 
-                            || (threatLevel > 0 ? FALLBACK_METRICS[refKey]?.[2] : '') 
-                            || '';
-                        
-                        // Get timing from NBM threats peak block
+
+                        let displayMetric = '';
+                        if (threatData.display_label && threatData.display_value !== undefined && threatData.display_value !== null) {
+                            displayMetric = `${threatData.display_label}: ${threatData.display_value}`;
+                        } else if (refKey === 'WIND' && threatData.g24_mph !== undefined && threatData.g24_mph !== null) {
+                            displayMetric = `24-hr max gust: ${Math.round(Number(threatData.g24_mph))} mph`;
+                        } else if (threatData.metric) {
+                            displayMetric = threatData.metric;
+                        } else if (FALLBACK_METRICS[refKey]?.[impactLevel]) {
+                            displayMetric = FALLBACK_METRICS[refKey][impactLevel];
+                        }
+
                         let timeString = '';
-                        const thr = refsThreats?.[refKey];
-                        if (thr && thr.peak_start_fxx && thr.prob > 0) {
-                            // peak_fxx is offset from cycle start, not from now
+                        const thr = threatData;
+                        if (thr && thr.peak_start_fxx && probability > 0) {
                             const baseMs = cycleStartTime || globalNow.getTime();
                             const d1 = new Date(baseMs + thr.peak_start_fxx * 3600000);
                             const d2 = new Date(baseMs + thr.peak_end_fxx   * 3600000);
@@ -1987,51 +2015,72 @@
                         }
 
                         const card = document.createElement('div');
-                        const cardActive = h.risk >= 2;   // bright border for MINOR+
-                        const cardDimmed = h.risk === 0;  // fully dimmed if no threat at all
                         card.className = 'ops-card flex flex-col justify-between p-3';
-                        if (cardActive) {
-                            // MINOR+ — bright border and tint
-                            card.style.border           = `3px solid ${borderColor}`;
-                            card.style.backgroundColor  = borderColor + '1a';
-                            card.style.opacity          = '1';
-                        } else if (!cardDimmed) {
-                            // LITTLE TO NONE — subtle border, show prob, slightly dimmed
-                            card.style.border           = `1px solid ${borderColor}`;
-                            card.style.backgroundColor  = '';
-                            card.style.opacity          = '0.7';
+
+                        if (isActive) {
+                            card.style.border = `3px solid ${config.color}`;
+                            card.style.backgroundColor = config.color + '1a';
+                            card.style.opacity = '1';
+                        } else if (r === 1) {
+                            card.style.border = `1px solid ${config.color}`;
+                            card.style.backgroundColor = '';
+                            card.style.opacity = '0.72';
                         } else {
-                            // risk=0 — fully dimmed, no prob
-                            card.style.border           = '1px solid rgba(255,255,255,0.06)';
-                            card.style.backgroundColor  = '';
-                            card.style.opacity          = '0.38';
+                            card.style.border = '1px solid rgba(255,255,255,0.06)';
+                            card.style.backgroundColor = '';
+                            card.style.opacity = '0.38';
                         }
+
+                        const titleColor = isNone ? '#71717a' : '#e2e8f0';
+                        const metricColor = isNone ? '#52525b' : (isActive ? '#d4d4d8' : '#71717a');
+                        const timeColor = isNone ? 'transparent' : (isActive ? config.color : '#52525b');
+
                         card.innerHTML = `
                             <div class="flex justify-between items-start z-10">
-                                <div style="display:flex;align-items:flex-end;gap:3px;">
-                                    <div class="hazard-val" style="color:${valColor}">${displayVal}<span class="percent-sign">%</span></div>
-                                    <span class="prob-label">PROB</span>
+                                <div class="hazard-card-title" style="color:${titleColor};">
+                                    ${hazardTitle}
                                 </div>
+                                <i class="ph ${h.icon}" style="font-size:1.25rem;color:${config.color};opacity:${isNone ? 0.28 : 0.85};"></i>
                             </div>
                             <div class="z-10 mt-1">
-                                <div class="hazard-label">${h.name}</div>
-                                <div class="hazard-criteria" style="color:${isGrey ? '#52525b' : cardActive ? '#a1a1aa' : '#71717a'}">${displayMetric}</div>
-                                <div class="hazard-time" style="color:${isGrey ? 'transparent' : cardActive ? config.color : '#52525b'}">${timeString}</div>
+                                <div class="hazard-criteria" style="color:${metricColor}">${displayMetric || '&nbsp;'}</div>
+                                <div class="hazard-time" style="color:${timeColor}">${timeString || '&nbsp;'}</div>
                             </div>
-                            <i class="ph ${h.icon} watermark-icon" style="color: ${borderColor};"></i>
+                            <i class="ph ${h.icon} watermark-icon" style="color:${config.color};"></i>
                         `;
-                        
+
+                        const impactReasons = [
+                            threatData.ops_label,
+                            threatData.driver,
+                            threatData.impact_reason,
+                            threatData.impact_reasons,
+                        ].flat().filter(Boolean);
+
+                        const reasonHtml = (r >= 2 && impactReasons.length)
+                            ? `<div class="mt-2 text-[10px] text-gray-300 border-t border-gray-700 pt-2">
+                                   <div class="font-bold text-gray-500 uppercase mb-1">Impact reasons</div>
+                                   ${impactReasons.map(x => `<div>• ${x}</div>`).join('')}
+                               </div>`
+                            : `<div class="mt-2 text-[10px] text-gray-500 border-t border-gray-700 pt-2">No operational impact reason displayed because the current risk is ${riskName}.</div>`;
+
+                        const probHtml = probability > 0
+                            ? `<span class="font-mono text-white">${Math.round(probability)}% Prob</span>`
+                            : `<span class="font-mono text-gray-500">0% Prob</span>`;
+
                         const tHtml = `
                             <div class="flex justify-between border-b border-gray-700 pb-1 mb-2">
                                 <span class="font-bold uppercase text-gray-400">${h.name}</span>
-                                <span class="font-mono text-${isGrey ? 'gray-500' : 'white'}">${displayVal}% Prob</span>
+                                ${probHtml}
                             </div>
                             <div class="mb-2">
-                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded" style="background-color: ${config.color}; color: ${config.textColor}">RISK: ${h.risk === 0 ? 'NONE' : config.name.toUpperCase()}</span>
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded" style="background-color:${config.color}; color:${config.textColor}">RISK: ${riskName.toUpperCase()}</span>
+                                ${impactLevel > 0 ? `<span class="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-800 text-gray-300">IMPACT: ${impactLevel}</span>` : ''}
                             </div>
-                            ${h.risk > 0 && displayMetric ? `<div class="text-[10px] italic text-gray-400 bg-gray-800 p-1 rounded mb-1">Threshold: ${displayMetric}</div>` : ''}
-                            ${h.prob > 0 && h.prep ? `<div class="mt-1 text-[10px] text-gray-300 border-t border-gray-700 pt-1"><span class="font-bold text-gray-500 uppercase">Action:</span> ${h.prep}</div>` : ''}
+                            ${displayMetric ? `<div class="text-[10px] italic text-gray-400 bg-gray-800 p-1 rounded mb-1">Threshold/metric: ${displayMetric}</div>` : ''}
+                            ${timeString ? `<div class="text-[10px] text-gray-400 bg-gray-800 p-1 rounded mb-1">Peak window: ${timeString}</div>` : ''}
+                            ${reasonHtml}
                         `;
+
                         card.addEventListener('mouseenter', () => showTooltip(tHtml));
                         card.addEventListener('mouseleave', hideTooltip);
                         grid.appendChild(card);
